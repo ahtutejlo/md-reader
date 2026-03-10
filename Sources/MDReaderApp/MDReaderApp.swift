@@ -8,6 +8,7 @@ struct MDReaderApp: App {
     @NSApplicationDelegateAdaptor private var appDelegate: AppDelegate
     @State private var fileCache = FileCache()
     @State private var selectedFilePath: String?
+    @State private var viewModel = EditorViewModel()
 
     var body: some Scene {
         WindowGroup {
@@ -18,13 +19,26 @@ struct MDReaderApp: App {
                     onRemove: { fileCache.removeFile($0) }
                 )
             } detail: {
-                ContentView(fileURL: selectedFilePath.map { URL(fileURLWithPath: $0) })
+                ContentView(
+                    fileURL: selectedFilePath.map { URL(fileURLWithPath: $0) },
+                    viewModel: viewModel
+                )
             }
             .onOpenURL { url in
                 let fileURL = URL(fileURLWithPath: url.path)
                 openMarkdownFile(fileURL)
             }
             .toolbar {
+                ToolbarItem {
+                    Picker("View Mode", selection: $viewModel.viewMode) {
+                        ForEach(ViewMode.allCases, id: \.self) { mode in
+                            Image(systemName: mode.icon)
+                                .help(mode.label)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(width: 120)
+                }
                 ToolbarItem {
                     Button {
                         openFilePanel()
@@ -46,7 +60,23 @@ struct MDReaderApp: App {
                 return true
             }
             .frame(minWidth: 700, minHeight: 500)
+            .navigationTitle(windowTitle)
         }
+        .commands {
+            CommandGroup(replacing: .saveItem) {
+                Button("Save") {
+                    viewModel.save()
+                }
+                .keyboardShortcut("s", modifiers: .command)
+                .disabled(!viewModel.hasUnsavedChanges)
+            }
+        }
+    }
+
+    private var windowTitle: String {
+        guard let path = selectedFilePath else { return "MDReader" }
+        let name = URL(fileURLWithPath: path).lastPathComponent
+        return viewModel.hasUnsavedChanges ? "\(name) — Edited" : name
     }
 
     private func openMarkdownFile(_ url: URL) {
