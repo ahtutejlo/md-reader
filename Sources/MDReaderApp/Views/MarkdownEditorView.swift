@@ -36,11 +36,9 @@ struct MarkdownEditorView: NSViewRepresentable {
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         let textView = scrollView.documentView as! NSTextView
         if textView.string != viewModel.text {
-            let selectedRanges = textView.selectedRanges
             context.coordinator.isUpdating = true
             textView.string = viewModel.text
             context.coordinator.applyHighlighting()
-            textView.selectedRanges = selectedRanges
             context.coordinator.isUpdating = false
         }
     }

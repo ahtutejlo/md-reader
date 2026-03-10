@@ -32,13 +32,15 @@ class EditorViewModel {
         guard let url = fileURL else { return }
         autoSaveTask?.cancel()
         stopMonitoring()
-        try? text.write(to: url, atomically: true, encoding: .utf8)
-        hasUnsavedChanges = false
+        do {
+            try text.write(to: url, atomically: true, encoding: .utf8)
+            hasUnsavedChanges = false
+        } catch {}
         startMonitoring()
     }
 
     func handleExternalChange() {
-        guard let _ = fileURL else { return }
+        guard fileURL != nil else { return }
         if hasUnsavedChanges {
             showExternalChangeAlert = true
         } else {
@@ -65,9 +67,7 @@ class EditorViewModel {
     private func scheduleAutoSave() {
         autoSaveTask?.cancel()
         let task = DispatchWorkItem { [weak self] in
-            DispatchQueue.main.async {
-                self?.save()
-            }
+            self?.save()
         }
         autoSaveTask = task
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5, execute: task)

@@ -4,14 +4,6 @@ enum MarkdownSyntaxHighlighter {
     private static let monoFont = NSFont.monospacedSystemFont(ofSize: 14, weight: .regular)
     private static let boldMonoFont = NSFont.monospacedSystemFont(ofSize: 14, weight: .bold)
 
-    private static var headingFont: NSFont {
-        NSFont.monospacedSystemFont(ofSize: 18, weight: .bold)
-    }
-
-    private static var subheadingFont: NSFont {
-        NSFont.monospacedSystemFont(ofSize: 16, weight: .bold)
-    }
-
     private static var fenceColor: NSColor {
         .secondaryLabelColor
     }
@@ -24,13 +16,19 @@ enum MarkdownSyntaxHighlighter {
         NSColor(red: 0.0, green: 0.35, blue: 0.85, alpha: 1.0)
     }
 
-    private static var boldColor: NSColor {
-        .labelColor
-    }
-
     private static var linkColor: NSColor {
         NSColor(red: 0.0, green: 0.44, blue: 0.88, alpha: 1.0)
     }
+
+    // MARK: - Cached Regex Patterns
+
+    private static let fenceRegex = try! NSRegularExpression(pattern: #"^```.*$"#, options: [.anchorsMatchLines])
+    private static let headingRegex = try! NSRegularExpression(pattern: #"^#{1,6}\s+.*$"#, options: [.anchorsMatchLines])
+    private static let boldRegex = try! NSRegularExpression(pattern: #"\*\*[^*]+\*\*"#, options: [.anchorsMatchLines])
+    private static let italicRegex = try! NSRegularExpression(pattern: #"(?<!\*)\*(?!\*)[^*]+\*(?!\*)"#, options: [.anchorsMatchLines])
+    private static let inlineCodeRegex = try! NSRegularExpression(pattern: #"`[^`]+`"#, options: [.anchorsMatchLines])
+    private static let linkRegex = try! NSRegularExpression(pattern: #"\[[^\]]+\]\([^)]+\)"#, options: [.anchorsMatchLines])
+    private static let blockquoteRegex = try! NSRegularExpression(pattern: #"^>.*$"#, options: [.anchorsMatchLines])
 
     static func highlight(_ text: String) -> NSMutableAttributedString {
         let result = NSMutableAttributedString(
@@ -42,62 +40,56 @@ enum MarkdownSyntaxHighlighter {
         )
 
         let fullRange = NSRange(location: 0, length: result.length)
-        let nsString = text as NSString
 
         // Code blocks (fenced)
-        applyPattern(#"^```.*$"#, to: result, in: fullRange, nsString: nsString, attrs: [
+        applyRegex(fenceRegex, to: result, in: fullRange, text: text, attrs: [
             .foregroundColor: fenceColor,
             .font: monoFont
         ])
 
         // Headings
-        applyPattern(#"^#{1,6}\s+.*$"#, to: result, in: fullRange, nsString: nsString, attrs: [
+        applyRegex(headingRegex, to: result, in: fullRange, text: text, attrs: [
             .foregroundColor: headingColor,
             .font: boldMonoFont
         ])
 
         // Bold **text**
-        applyPattern(#"\*\*[^*]+\*\*"#, to: result, in: fullRange, nsString: nsString, attrs: [
+        applyRegex(boldRegex, to: result, in: fullRange, text: text, attrs: [
             .font: boldMonoFont
         ])
 
         // Italic *text*
-        applyPattern(#"(?<!\*)\*(?!\*)[^*]+\*(?!\*)"#, to: result, in: fullRange, nsString: nsString, attrs: [
+        applyRegex(italicRegex, to: result, in: fullRange, text: text, attrs: [
             .font: NSFontManager.shared.convert(monoFont, toHaveTrait: .italicFontMask)
         ])
 
         // Inline code `text`
-        applyPattern(#"`[^`]+`"#, to: result, in: fullRange, nsString: nsString, attrs: [
+        applyRegex(inlineCodeRegex, to: result, in: fullRange, text: text, attrs: [
             .foregroundColor: inlineCodeColor,
             .font: monoFont
         ])
 
         // Links [text](url)
-        applyPattern(#"\[[^\]]+\]\([^)]+\)"#, to: result, in: fullRange, nsString: nsString, attrs: [
+        applyRegex(linkRegex, to: result, in: fullRange, text: text, attrs: [
             .foregroundColor: linkColor
         ])
 
         // Blockquote lines
-        applyPattern(#"^>.*$"#, to: result, in: fullRange, nsString: nsString, attrs: [
+        applyRegex(blockquoteRegex, to: result, in: fullRange, text: text, attrs: [
             .foregroundColor: NSColor.secondaryLabelColor
         ])
 
         return result
     }
 
-    private static func applyPattern(
-        _ pattern: String,
+    private static func applyRegex(
+        _ regex: NSRegularExpression,
         to attrString: NSMutableAttributedString,
         in range: NSRange,
-        nsString: NSString,
+        text: String,
         attrs: [NSAttributedString.Key: Any]
     ) {
-        guard let regex = try? NSRegularExpression(
-            pattern: pattern,
-            options: [.anchorsMatchLines]
-        ) else { return }
-
-        let matches = regex.matches(in: nsString as String, range: range)
+        let matches = regex.matches(in: text, range: range)
         for match in matches {
             attrString.addAttributes(attrs, range: match.range)
         }

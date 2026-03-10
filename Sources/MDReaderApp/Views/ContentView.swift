@@ -30,11 +30,6 @@ struct ContentView: View {
                 )
             }
         }
-        .onChange(of: fileURL) { _, newURL in
-            if let url = newURL {
-                viewModel.loadFile(url: url)
-            }
-        }
         .task(id: fileURL) {
             if let url = fileURL {
                 viewModel.loadFile(url: url)
