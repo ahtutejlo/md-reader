@@ -7,20 +7,28 @@ struct ContentView: View {
     var body: some View {
         Group {
             if let _ = fileURL {
-                switch viewModel.viewMode {
-                case .editor:
-                    MarkdownEditorView(viewModel: viewModel)
-
-                case .split:
-                    HSplitView {
+                if let error = viewModel.loadError {
+                    ContentUnavailableView(
+                        "Cannot Read File",
+                        systemImage: "exclamationmark.triangle",
+                        description: Text(error.localizedDescription)
+                    )
+                } else {
+                    switch viewModel.viewMode {
+                    case .editor:
                         MarkdownEditorView(viewModel: viewModel)
-                            .frame(minWidth: 200)
-                        MarkdownWebView(markdown: viewModel.text)
-                            .frame(minWidth: 200)
-                    }
 
-                case .preview:
-                    MarkdownWebView(markdown: viewModel.text)
+                    case .split:
+                        HSplitView {
+                            MarkdownEditorView(viewModel: viewModel)
+                                .frame(minWidth: 200)
+                            MarkdownWebView(markdown: viewModel.text)
+                                .frame(minWidth: 200)
+                        }
+
+                    case .preview:
+                        MarkdownWebView(markdown: viewModel.text)
+                    }
                 }
             } else {
                 ContentUnavailableView(
@@ -33,6 +41,8 @@ struct ContentView: View {
         .task(id: fileURL) {
             if let url = fileURL {
                 viewModel.loadFile(url: url)
+            } else {
+                viewModel.clearFile()
             }
         }
         .alert("File Changed Externally", isPresented: $viewModel.showExternalChangeAlert) {
@@ -48,6 +58,14 @@ struct ContentView: View {
             }
         } message: {
             Text("The file has been modified by another application. What would you like to do?")
+        }
+        .alert("Save Failed", isPresented: Binding(
+            get: { viewModel.saveError != nil },
+            set: { if !$0 { viewModel.saveError = nil } }
+        )) {
+            Button("OK") { viewModel.saveError = nil }
+        } message: {
+            Text(viewModel.saveError?.localizedDescription ?? "")
         }
     }
 }

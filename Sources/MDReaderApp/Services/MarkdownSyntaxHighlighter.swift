@@ -4,20 +4,33 @@ enum MarkdownSyntaxHighlighter {
     private static let monoFont = NSFont.monospacedSystemFont(ofSize: 14, weight: .regular)
     private static let boldMonoFont = NSFont.monospacedSystemFont(ofSize: 14, weight: .bold)
 
-    private static var fenceColor: NSColor {
-        .secondaryLabelColor
-    }
+    private static var fenceColor: NSColor { .secondaryLabelColor }
 
     private static var inlineCodeColor: NSColor {
-        NSColor(red: 0.78, green: 0.24, blue: 0.24, alpha: 1.0)
+        NSColor(name: nil) { appearance in
+            switch appearance.bestMatch(from: [.aqua, .darkAqua]) {
+            case .darkAqua: NSColor(red: 0.95, green: 0.45, blue: 0.45, alpha: 1.0)
+            default: NSColor(red: 0.78, green: 0.24, blue: 0.24, alpha: 1.0)
+            }
+        }
     }
 
     private static var headingColor: NSColor {
-        NSColor(red: 0.0, green: 0.35, blue: 0.85, alpha: 1.0)
+        NSColor(name: nil) { appearance in
+            switch appearance.bestMatch(from: [.aqua, .darkAqua]) {
+            case .darkAqua: NSColor(red: 0.35, green: 0.65, blue: 1.0, alpha: 1.0)
+            default: NSColor(red: 0.0, green: 0.35, blue: 0.85, alpha: 1.0)
+            }
+        }
     }
 
     private static var linkColor: NSColor {
-        NSColor(red: 0.0, green: 0.44, blue: 0.88, alpha: 1.0)
+        NSColor(name: nil) { appearance in
+            switch appearance.bestMatch(from: [.aqua, .darkAqua]) {
+            case .darkAqua: NSColor(red: 0.3, green: 0.65, blue: 1.0, alpha: 1.0)
+            default: NSColor(red: 0.0, green: 0.44, blue: 0.88, alpha: 1.0)
+            }
+        }
     }
 
     // MARK: - Cached Regex Patterns

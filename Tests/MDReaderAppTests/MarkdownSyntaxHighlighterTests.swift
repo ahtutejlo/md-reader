@@ -5,7 +5,7 @@ import AppKit
 @Test func highlightsHeading() {
     let text = "# Hello World"
     let highlighted = MarkdownSyntaxHighlighter.highlight(text)
-    var attrs = highlighted.attributes(at: 0, effectiveRange: nil)
+    let attrs = highlighted.attributes(at: 0, effectiveRange: nil)
     let font = attrs[.font] as! NSFont
     #expect(font.fontDescriptor.symbolicTraits.contains(.bold))
 }
@@ -19,10 +19,11 @@ import AppKit
 }
 
 @Test func highlightsCodeBlock() {
-    let text = "```swift\nlet x = 1\n```"
+    let text = "```swift"
     let highlighted = MarkdownSyntaxHighlighter.highlight(text)
-    let attrs = highlighted.attributes(at: 0, effectiveRange: nil)
-    #expect(attrs[.foregroundColor] != nil)
+    let color = highlighted.attribute(.foregroundColor, at: 0, effectiveRange: nil) as? NSColor
+    // Fence lines use .secondaryLabelColor, not the default .labelColor
+    #expect(color == NSColor.secondaryLabelColor)
 }
 
 @Test func plainTextUnchanged() {

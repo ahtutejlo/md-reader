@@ -35,18 +35,23 @@ struct MarkdownEditorView: NSViewRepresentable {
 
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         let textView = scrollView.documentView as! NSTextView
-        if textView.string != viewModel.text {
-            context.coordinator.isUpdating = true
-            textView.string = viewModel.text
-            context.coordinator.applyHighlighting()
-            context.coordinator.isUpdating = false
-        }
+        // Use version counter to avoid O(n) string comparison on every SwiftUI render.
+        // textVersion increments only on external text changes (loadFile, reloadFromDisk, clearFile).
+        // User typing updates viewModel.text but not textVersion, so we skip the NSView update —
+        // the NSTextView already has the correct content and highlighting is handled by textDidChange.
+        guard context.coordinator.lastTextVersion != viewModel.textVersion else { return }
+        context.coordinator.lastTextVersion = viewModel.textVersion
+        context.coordinator.isUpdating = true
+        textView.string = viewModel.text
+        context.coordinator.applyHighlighting()
+        context.coordinator.isUpdating = false
     }
 
     class Coordinator: NSObject, NSTextViewDelegate {
         var viewModel: EditorViewModel
         weak var textView: NSTextView?
         var isUpdating = false
+        var lastTextVersion: Int = -1
         private var highlightWorkItem: DispatchWorkItem?
 
         init(viewModel: EditorViewModel) {
