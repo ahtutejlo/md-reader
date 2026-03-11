@@ -14,6 +14,11 @@ let package = Package(
         .executableTarget(
             name: "mdreader",
             path: "Sources/mdreader"
+        ),
+        .testTarget(
+            name: "MDReaderAppTests",
+            dependencies: ["MDReaderApp"],
+            path: "Tests/MDReaderAppTests"
         )
     ]
 )
