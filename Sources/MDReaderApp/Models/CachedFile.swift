@@ -4,6 +4,7 @@ struct CachedFile: Identifiable, Codable, Equatable {
     var id: String { path }
     let path: String
     var lastOpened: Date
+    var isFavorite: Bool = false
 
     var name: String {
         URL(fileURLWithPath: path).lastPathComponent
@@ -14,7 +15,7 @@ struct CachedFile: Identifiable, Codable, Equatable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case path, lastOpened
+        case path, lastOpened, isFavorite
     }
 
     init(url: URL) throws {
@@ -22,5 +23,13 @@ struct CachedFile: Identifiable, Codable, Equatable {
         _ = try FileManager.default.attributesOfItem(atPath: url.path)
         self.path = url.path
         self.lastOpened = Date()
+        self.isFavorite = false
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        path = try container.decode(String.self, forKey: .path)
+        lastOpened = try container.decode(Date.self, forKey: .lastOpened)
+        isFavorite = try container.decodeIfPresent(Bool.self, forKey: .isFavorite) ?? false
     }
 }
