@@ -16,7 +16,8 @@ struct MDReaderApp: App {
                 SidebarView(
                     files: fileCache.files,
                     selectedFilePath: $selectedFilePath,
-                    onRemove: { fileCache.removeFile($0) }
+                    onRemove: { fileCache.removeFile($0) },
+                    onToggleFavorite: { fileCache.toggleFavorite(path: $0) }
                 )
             } detail: {
                 ContentView(
@@ -71,6 +72,15 @@ struct MDReaderApp: App {
                 }
                 .keyboardShortcut("s", modifiers: .command)
                 .disabled(!viewModel.hasUnsavedChanges)
+            }
+            CommandGroup(after: .sidebar) {
+                Button("Toggle Favorite") {
+                    if let path = selectedFilePath {
+                        fileCache.toggleFavorite(path: path)
+                    }
+                }
+                .keyboardShortcut("d", modifiers: [.command, .shift])
+                .disabled(selectedFilePath == nil)
             }
         }
     }
