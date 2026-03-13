@@ -61,7 +61,9 @@ struct MDReaderApp: App {
             }
             .frame(minWidth: 700, minHeight: 500)
             .navigationTitle(windowTitle)
+            .handlesExternalEvents(preferring: ["*"], allowing: ["*"])
         }
+        .handlesExternalEvents(matching: ["*"])
         .commands {
             CommandGroup(replacing: .saveItem) {
                 Button("Save") {
