@@ -29,6 +29,12 @@ class FileCache {
         save()
     }
 
+    func toggleFavorite(path: String) {
+        guard let index = files.firstIndex(where: { $0.path == path }) else { return }
+        files[index].isFavorite.toggle()
+        save()
+    }
+
     private func load() {
         guard let data = try? Data(contentsOf: cacheURL),
               let decoded = try? JSONDecoder.iso8601.decode([CachedFile].self, from: data) else {
