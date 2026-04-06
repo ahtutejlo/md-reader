@@ -85,7 +85,7 @@ struct MarkdownWebView: NSViewRepresentable {
 
     /// Converts markdown source to HTML using line-by-line parsing.
     /// Input is local file content — no untrusted user input.
-    private func markdownToHTML(_ source: String) -> String {
+    func markdownToHTML(_ source: String) -> String {
         let lines = source.components(separatedBy: "\n")
         var html: [String] = []
         var i = 0
@@ -179,22 +179,24 @@ struct MarkdownWebView: NSViewRepresentable {
             }
 
             // Table
-            if line.contains("|") && i + 1 < lines.count &&
-               lines[i + 1].range(of: #"^\|?[\s-:|]+\|"#, options: .regularExpression) != nil {
-                // Header row
+            if isTableStart(lines: lines, at: i) {
                 let headers = parseTableRow(line)
-                // Skip separator row
+                let colCount = headers.count
+                let alignments = parseAlignments(lines[i + 1], count: colCount)
                 i += 2
                 html.append("<table><thead><tr>")
-                for h in headers {
-                    html.append("<th>\(inlineMarkdown(h))</th>")
+                for (j, h) in headers.enumerated() {
+                    let style = alignments[j].isEmpty ? "" : " style=\"text-align:\(alignments[j])\""
+                    html.append("<th\(style)>\(inlineMarkdown(h))</th>")
                 }
                 html.append("</tr></thead><tbody>")
                 while i < lines.count && lines[i].contains("|") {
-                    let cells = parseTableRow(lines[i])
+                    let raw = parseTableRow(lines[i])
+                    let cells = normalizeCells(raw, count: colCount)
                     html.append("<tr>")
-                    for c in cells {
-                        html.append("<td>\(inlineMarkdown(c))</td>")
+                    for (j, c) in cells.enumerated() {
+                        let style = alignments[j].isEmpty ? "" : " style=\"text-align:\(alignments[j])\""
+                        html.append("<td\(style)>\(inlineMarkdown(c))</td>")
                     }
                     html.append("</tr>")
                     i += 1
@@ -218,7 +220,8 @@ struct MarkdownWebView: NSViewRepresentable {
                   !lines[i].hasPrefix("- ") &&
                   !lines[i].hasPrefix("* ") &&
                   lines[i].range(of: #"^\d+\. "#, options: .regularExpression) == nil &&
-                  lines[i].trimmingCharacters(in: .whitespaces) != "---" {
+                  lines[i].trimmingCharacters(in: .whitespaces) != "---" &&
+                  !isTableStart(lines: lines, at: i) {
                 paraLines.append(inlineMarkdown(lines[i]))
                 i += 1
             }
@@ -230,11 +233,60 @@ struct MarkdownWebView: NSViewRepresentable {
         return html.joined(separator: "\n")
     }
 
+    private func isTableStart(lines: [String], at i: Int) -> Bool {
+        guard i + 1 < lines.count, lines[i].contains("|") else { return false }
+        return lines[i + 1].range(
+            of: #"^\|?(\s*:?-{3,}:?\s*\|)+\s*:?-{3,}:?\s*\|?\s*$"#,
+            options: .regularExpression
+        ) != nil
+    }
+
     private func parseTableRow(_ row: String) -> [String] {
         var trimmed = row.trimmingCharacters(in: .whitespaces)
         if trimmed.hasPrefix("|") { trimmed = String(trimmed.dropFirst()) }
         if trimmed.hasSuffix("|") { trimmed = String(trimmed.dropLast()) }
-        return trimmed.components(separatedBy: "|").map { $0.trimmingCharacters(in: .whitespaces) }
+        // Split by unescaped pipes
+        var cells: [String] = []
+        var current = ""
+        var escaped = false
+        for ch in trimmed {
+            if escaped {
+                if ch == "|" { current.append(ch) } else { current.append("\\"); current.append(ch) }
+                escaped = false
+            } else if ch == "\\" {
+                escaped = true
+            } else if ch == "|" {
+                cells.append(current.trimmingCharacters(in: .whitespaces))
+                current = ""
+            } else {
+                current.append(ch)
+            }
+        }
+        if escaped { current.append("\\") }
+        cells.append(current.trimmingCharacters(in: .whitespaces))
+        return cells
+    }
+
+    private func normalizeCells(_ cells: [String], count: Int) -> [String] {
+        if cells.count >= count { return Array(cells.prefix(count)) }
+        return cells + Array(repeating: "", count: count - cells.count)
+    }
+
+    private func parseAlignments(_ separator: String, count: Int) -> [String] {
+        let parts = separator.trimmingCharacters(in: .whitespaces)
+            .trimmingCharacters(in: .init(charactersIn: "|"))
+            .components(separatedBy: "|")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+        var alignments: [String] = []
+        for part in parts {
+            let left = part.hasPrefix(":")
+            let right = part.hasSuffix(":")
+            if left && right { alignments.append("center") }
+            else if right { alignments.append("right") }
+            else if left { alignments.append("left") }
+            else { alignments.append("") }
+        }
+        return normalizeCells(alignments, count: count)
     }
 
     private func escapeHTML(_ text: String) -> String {
