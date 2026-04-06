@@ -178,6 +178,31 @@ struct MarkdownWebView: NSViewRepresentable {
                 continue
             }
 
+            // Table
+            if line.contains("|") && i + 1 < lines.count &&
+               lines[i + 1].range(of: #"^\|?[\s-:|]+\|"#, options: .regularExpression) != nil {
+                // Header row
+                let headers = parseTableRow(line)
+                // Skip separator row
+                i += 2
+                html.append("<table><thead><tr>")
+                for h in headers {
+                    html.append("<th>\(inlineMarkdown(h))</th>")
+                }
+                html.append("</tr></thead><tbody>")
+                while i < lines.count && lines[i].contains("|") {
+                    let cells = parseTableRow(lines[i])
+                    html.append("<tr>")
+                    for c in cells {
+                        html.append("<td>\(inlineMarkdown(c))</td>")
+                    }
+                    html.append("</tr>")
+                    i += 1
+                }
+                html.append("</tbody></table>")
+                continue
+            }
+
             // Empty line
             if line.trimmingCharacters(in: .whitespaces).isEmpty {
                 i += 1; continue
@@ -203,6 +228,13 @@ struct MarkdownWebView: NSViewRepresentable {
         }
 
         return html.joined(separator: "\n")
+    }
+
+    private func parseTableRow(_ row: String) -> [String] {
+        var trimmed = row.trimmingCharacters(in: .whitespaces)
+        if trimmed.hasPrefix("|") { trimmed = String(trimmed.dropFirst()) }
+        if trimmed.hasSuffix("|") { trimmed = String(trimmed.dropLast()) }
+        return trimmed.components(separatedBy: "|").map { $0.trimmingCharacters(in: .whitespaces) }
     }
 
     private func escapeHTML(_ text: String) -> String {
