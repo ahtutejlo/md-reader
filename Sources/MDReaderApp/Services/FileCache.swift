@@ -5,11 +5,15 @@ class FileCache {
     private(set) var files: [CachedFile] = []
     private let cacheURL: URL
 
-    init() {
-        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        let dir = appSupport.appendingPathComponent("MDReader", isDirectory: true)
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        cacheURL = dir.appendingPathComponent("cache.json")
+    init(cacheURL: URL? = nil) {
+        if let cacheURL {
+            self.cacheURL = cacheURL
+        } else {
+            let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+            let dir = appSupport.appendingPathComponent("MDReader", isDirectory: true)
+            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            self.cacheURL = dir.appendingPathComponent("cache.json")
+        }
         load()
     }
 
@@ -40,7 +44,22 @@ class FileCache {
               let decoded = try? JSONDecoder.iso8601.decode([CachedFile].self, from: data) else {
             return
         }
-        files = decoded
+        let existing = decoded.filter { Self.shouldKeep(cached: $0) }
+        files = existing
+        if existing.count != decoded.count {
+            save()
+        }
+    }
+
+    /// Keep a cached entry if its file exists, OR if its parent directory is
+    /// unreachable (e.g. unmounted external/network volume) — we can't tell a
+    /// deleted file apart from a temporarily offline one, so err on the side of
+    /// preserving user favorites.
+    private static func shouldKeep(cached: CachedFile) -> Bool {
+        let fm = FileManager.default
+        if fm.fileExists(atPath: cached.path) { return true }
+        let parent = (cached.path as NSString).deletingLastPathComponent
+        return !fm.fileExists(atPath: parent)
     }
 
     private func save() {
