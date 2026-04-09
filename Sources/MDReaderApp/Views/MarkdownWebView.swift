@@ -39,6 +39,9 @@ struct MarkdownWebView: NSViewRepresentable {
             --surface:       light-dark(#f4efe4, #1c1a16);
             --code-text:     light-dark(#8a3a0c, #f1a775);
             --selection:     light-dark(rgba(154, 74, 18, 0.18), rgba(227, 153, 90, 0.24));
+            --font-serif:    ui-serif, "New York", "Charter", "Iowan Old Style", Georgia, serif;
+            --font-sans:     -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+            --font-mono:     ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
         }
 
         * { box-sizing: border-box; }
@@ -48,7 +51,7 @@ struct MarkdownWebView: NSViewRepresentable {
         html { scroll-behavior: smooth; }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+            font-family: var(--font-sans);
             font-size: 15px;
             line-height: 1.72;
             color: var(--text);
@@ -66,7 +69,7 @@ struct MarkdownWebView: NSViewRepresentable {
 
         /* Headings — serif for editorial contrast */
         h1, h2, h3, h4 {
-            font-family: ui-serif, "New York", "Charter", "Iowan Old Style", Georgia, serif;
+            font-family: var(--font-serif);
             font-weight: 600;
             line-height: 1.18;
             letter-spacing: -0.015em;
@@ -100,7 +103,7 @@ struct MarkdownWebView: NSViewRepresentable {
 
         /* h5/h6 act as subtitles/labels, not headlines */
         h5, h6 {
-            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+            font-family: var(--font-sans);
             font-size: 0.82em;
             font-weight: 600;
             text-transform: uppercase;
@@ -118,7 +121,7 @@ struct MarkdownWebView: NSViewRepresentable {
         }
 
         /* Emphasis */
-        strong { font-weight: 650; color: var(--text); }
+        strong { font-weight: 600; color: var(--text); }
         em { font-style: italic; }
 
         /* Links */
@@ -137,7 +140,7 @@ struct MarkdownWebView: NSViewRepresentable {
 
         /* Inline code */
         code {
-            font-family: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+            font-family: var(--font-mono);
             font-size: 0.86em;
             background: var(--surface);
             color: var(--code-text);
@@ -149,7 +152,7 @@ struct MarkdownWebView: NSViewRepresentable {
 
         /* Fenced code blocks */
         pre {
-            font-family: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+            font-family: var(--font-mono);
             background: var(--surface);
             padding: 18px 22px;
             border-radius: 10px;
@@ -179,7 +182,7 @@ struct MarkdownWebView: NSViewRepresentable {
             margin: 1.5em 0;
             padding: 0.2em 0 0.2em 1.4em;
             border-left: 2px solid var(--accent-soft);
-            font-family: ui-serif, "New York", "Charter", Georgia, serif;
+            font-family: var(--font-serif);
             font-style: italic;
             font-size: 1.06em;
             color: var(--text-muted);
@@ -248,6 +251,12 @@ struct MarkdownWebView: NSViewRepresentable {
             max-width: 100%;
             border-radius: 6px;
             margin: 1em 0;
+        }
+
+        /* Respect users who prefer reduced motion */
+        @media (prefers-reduced-motion: reduce) {
+            html { scroll-behavior: auto; }
+            a, tbody tr { transition: none; }
         }
         </style>
         </head>
