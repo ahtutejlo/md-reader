@@ -36,9 +36,13 @@ import Foundation
 @Test func fileCacheToggleFavorite() throws {
     let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("fav-\(UUID()).md")
     try "# Test".write(to: tmp, atomically: true, encoding: .utf8)
-    defer { try? FileManager.default.removeItem(at: tmp) }
+    let cacheURL = FileManager.default.temporaryDirectory.appendingPathComponent("cache-\(UUID()).json")
+    defer {
+        try? FileManager.default.removeItem(at: tmp)
+        try? FileManager.default.removeItem(at: cacheURL)
+    }
 
-    let cache = FileCache()
+    let cache = FileCache(cacheURL: cacheURL)
     cache.addFile(url: tmp)
     #expect(cache.files.first?.isFavorite == false)
 
@@ -47,4 +51,27 @@ import Foundation
 
     cache.toggleFavorite(path: tmp.path)
     #expect(cache.files.first?.isFavorite == false)
+}
+
+@Test func fileCacheLoadFiltersDeletedFiles() throws {
+    let cacheURL = FileManager.default.temporaryDirectory.appendingPathComponent("cache-\(UUID()).json")
+    let alive = FileManager.default.temporaryDirectory.appendingPathComponent("alive-\(UUID()).md")
+    let dead = FileManager.default.temporaryDirectory.appendingPathComponent("dead-\(UUID()).md")
+    try "# Alive".write(to: alive, atomically: true, encoding: .utf8)
+    try "# Dead".write(to: dead, atomically: true, encoding: .utf8)
+    defer {
+        try? FileManager.default.removeItem(at: alive)
+        try? FileManager.default.removeItem(at: cacheURL)
+    }
+
+    let cache = FileCache(cacheURL: cacheURL)
+    cache.addFile(url: alive)
+    cache.addFile(url: dead)
+    #expect(cache.files.count == 2)
+
+    try FileManager.default.removeItem(at: dead)
+
+    let reloaded = FileCache(cacheURL: cacheURL)
+    #expect(reloaded.files.count == 1)
+    #expect(reloaded.files.first?.path == alive.path)
 }

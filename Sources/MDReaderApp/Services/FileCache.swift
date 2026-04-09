@@ -5,11 +5,15 @@ class FileCache {
     private(set) var files: [CachedFile] = []
     private let cacheURL: URL
 
-    init() {
-        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        let dir = appSupport.appendingPathComponent("MDReader", isDirectory: true)
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        cacheURL = dir.appendingPathComponent("cache.json")
+    init(cacheURL: URL? = nil) {
+        if let cacheURL {
+            self.cacheURL = cacheURL
+        } else {
+            let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+            let dir = appSupport.appendingPathComponent("MDReader", isDirectory: true)
+            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            self.cacheURL = dir.appendingPathComponent("cache.json")
+        }
         load()
     }
 
@@ -40,7 +44,11 @@ class FileCache {
               let decoded = try? JSONDecoder.iso8601.decode([CachedFile].self, from: data) else {
             return
         }
-        files = decoded
+        let existing = decoded.filter { FileManager.default.fileExists(atPath: $0.path) }
+        files = existing
+        if existing.count != decoded.count {
+            save()
+        }
     }
 
     private func save() {
