@@ -27,7 +27,7 @@ swift build
 # Run the app directly
 .build/debug/MDReaderApp
 
-# Create a proper .app bundle
+# Create a proper .app bundle (debug by default; pass CONFIG=release for a release build)
 ./scripts/bundle.sh
 open .build/MDReader.app
 ```
@@ -35,14 +35,20 @@ open .build/MDReader.app
 ## Installation
 
 ```bash
-# Install to /usr/local/bin (requires sudo)
+# Install both the .app to /Applications and the CLI to /usr/local/bin
 sudo make install
 
-# Or install to a custom prefix
-make install PREFIX=~/.local
+# Install only the .app bundle to /Applications (no sudo needed if you own /Applications)
+make install-app
+
+# Install only the CLI
+sudo make install-cli
+
+# Use custom locations
+make install APP_DIR=~/Applications PREFIX=~/.local
 ```
 
-To uninstall:
+To uninstall everything:
 
 ```bash
 sudo make uninstall

@@ -2,19 +2,20 @@
 set -euo pipefail
 
 APP_NAME="MDReader"
+CONFIG="${CONFIG:-debug}"
 BUNDLE_DIR=".build/${APP_NAME}.app"
 CONTENTS_DIR="${BUNDLE_DIR}/Contents"
 MACOS_DIR="${CONTENTS_DIR}/MacOS"
 
 # Build
-swift build
+swift build -c "${CONFIG}"
 
 # Create .app bundle structure
 rm -rf "${BUNDLE_DIR}"
 mkdir -p "${MACOS_DIR}" "${CONTENTS_DIR}/Resources"
 
 # Copy executable
-cp .build/debug/MDReaderApp "${MACOS_DIR}/${APP_NAME}"
+cp ".build/${CONFIG}/MDReaderApp" "${MACOS_DIR}/${APP_NAME}"
 
 # Copy Info.plist and add required bundle keys
 cat > "${CONTENTS_DIR}/Info.plist" << 'PLIST'
@@ -45,6 +46,49 @@ cat > "${CONTENTS_DIR}/Info.plist" << 'PLIST'
             <array>
                 <string>mdreader</string>
             </array>
+        </dict>
+    </array>
+    <key>CFBundleDocumentTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>Markdown Document</string>
+            <key>CFBundleTypeRole</key>
+            <string>Editor</string>
+            <key>LSHandlerRank</key>
+            <string>Alternate</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>net.daringfireball.markdown</string>
+            </array>
+        </dict>
+    </array>
+    <key>UTImportedTypeDeclarations</key>
+    <array>
+        <dict>
+            <key>UTTypeIdentifier</key>
+            <string>net.daringfireball.markdown</string>
+            <key>UTTypeDescription</key>
+            <string>Markdown Document</string>
+            <key>UTTypeConformsTo</key>
+            <array>
+                <string>public.plain-text</string>
+            </array>
+            <key>UTTypeTagSpecification</key>
+            <dict>
+                <key>public.filename-extension</key>
+                <array>
+                    <string>md</string>
+                    <string>markdown</string>
+                    <string>mdown</string>
+                    <string>mkdn</string>
+                    <string>mkd</string>
+                </array>
+                <key>public.mime-type</key>
+                <array>
+                    <string>text/markdown</string>
+                </array>
+            </dict>
         </dict>
     </array>
     <key>NSHighResolutionCapable</key>
