@@ -44,11 +44,22 @@ class FileCache {
               let decoded = try? JSONDecoder.iso8601.decode([CachedFile].self, from: data) else {
             return
         }
-        let existing = decoded.filter { FileManager.default.fileExists(atPath: $0.path) }
+        let existing = decoded.filter { Self.shouldKeep(cached: $0) }
         files = existing
         if existing.count != decoded.count {
             save()
         }
+    }
+
+    /// Keep a cached entry if its file exists, OR if its parent directory is
+    /// unreachable (e.g. unmounted external/network volume) — we can't tell a
+    /// deleted file apart from a temporarily offline one, so err on the side of
+    /// preserving user favorites.
+    private static func shouldKeep(cached: CachedFile) -> Bool {
+        let fm = FileManager.default
+        if fm.fileExists(atPath: cached.path) { return true }
+        let parent = (cached.path as NSString).deletingLastPathComponent
+        return !fm.fileExists(atPath: parent)
     }
 
     private func save() {

@@ -61,6 +61,7 @@ import Foundation
     try "# Dead".write(to: dead, atomically: true, encoding: .utf8)
     defer {
         try? FileManager.default.removeItem(at: alive)
+        try? FileManager.default.removeItem(at: dead)
         try? FileManager.default.removeItem(at: cacheURL)
     }
 
@@ -74,4 +75,30 @@ import Foundation
     let reloaded = FileCache(cacheURL: cacheURL)
     #expect(reloaded.files.count == 1)
     #expect(reloaded.files.first?.path == alive.path)
+}
+
+@Test func fileCacheLoadPreservesUnreachableVolumeEntries() throws {
+    // Simulate a file on an unmounted external volume: both the file and its
+    // parent directory are absent. load() should keep the entry so favorites
+    // on temporarily offline volumes don't silently disappear.
+    let cacheURL = FileManager.default.temporaryDirectory.appendingPathComponent("cache-\(UUID()).json")
+    let offlineParent = FileManager.default.temporaryDirectory.appendingPathComponent("offline-\(UUID())", isDirectory: true)
+    let offlineFile = offlineParent.appendingPathComponent("note.md")
+    try FileManager.default.createDirectory(at: offlineParent, withIntermediateDirectories: true)
+    try "# Offline".write(to: offlineFile, atomically: true, encoding: .utf8)
+    defer {
+        try? FileManager.default.removeItem(at: offlineParent)
+        try? FileManager.default.removeItem(at: cacheURL)
+    }
+
+    let cache = FileCache(cacheURL: cacheURL)
+    cache.addFile(url: offlineFile)
+    #expect(cache.files.count == 1)
+
+    // Unmount the "volume": remove the entire parent directory.
+    try FileManager.default.removeItem(at: offlineParent)
+
+    let reloaded = FileCache(cacheURL: cacheURL)
+    #expect(reloaded.files.count == 1)
+    #expect(reloaded.files.first?.path == offlineFile.path)
 }

@@ -4,13 +4,15 @@ APP_DIR ?= /Applications
 build:
 	swift build -c release
 
-bundle: build
+# bundle.sh builds the MDReaderApp target itself (release, thanks to CONFIG);
+# no extra `swift build` needed here.
+bundle:
 	CONFIG=release ./scripts/bundle.sh
 
 install-app: bundle
 	rm -rf $(APP_DIR)/MDReader.app
 	cp -R .build/MDReader.app $(APP_DIR)/MDReader.app
-	codesign --force --deep --sign - $(APP_DIR)/MDReader.app
+	codesign --force --sign - $(APP_DIR)/MDReader.app
 	xattr -dr com.apple.quarantine $(APP_DIR)/MDReader.app 2>/dev/null || true
 	touch $(APP_DIR)/MDReader.app
 	/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister \
