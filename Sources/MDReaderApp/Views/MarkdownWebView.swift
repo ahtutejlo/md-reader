@@ -6,7 +6,7 @@ struct MarkdownWebView: NSViewRepresentable {
     @Bindable var viewModel: EditorViewModel
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(viewModel: viewModel)
+        Coordinator()
     }
 
     func makeNSView(context: Context) -> WKWebView {
@@ -27,7 +27,6 @@ struct MarkdownWebView: NSViewRepresentable {
     }
 
     final class Coordinator: NSObject, WKNavigationDelegate {
-        let viewModel: EditorViewModel
         weak var webView: WKWebView?
         var isLoaded = false
         var lastMarkdown: String?
@@ -37,16 +36,19 @@ struct MarkdownWebView: NSViewRepresentable {
         private var updateWorkItem: DispatchWorkItem?
         private let log = Logger(subsystem: "dev.mdreader", category: "MarkdownWebView")
 
-        init(viewModel: EditorViewModel) {
-            self.viewModel = viewModel
-        }
-
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             isLoaded = true
             if let md = pendingMarkdown {
                 pushUpdate(markdown: md)
                 pendingMarkdown = nil
             }
+            // Known limitation: pushScroll runs against the still-empty #content
+            // div because pushUpdate's evaluateJavaScript hasn't completed yet, so
+            // mdScrollToLine returns early and the pending scroll is dropped.
+            // This is invisible on first launch (activeLine starts at 0). If the
+            // view is ever re-created mid-session with a non-zero activeLine and
+            // the scroll matters, fix by chaining pushScroll into the completion
+            // handler of pushUpdate.
             if let line = pendingActiveLine {
                 pushScroll(line: line)
                 pendingActiveLine = nil
