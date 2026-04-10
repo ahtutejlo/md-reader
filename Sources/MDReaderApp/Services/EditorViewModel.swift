@@ -9,6 +9,7 @@ class EditorViewModel {
     var loadError: Error?
     var saveError: Error?
     var pendingFormat: MarkdownFormatAction?
+    var activeLine: Int = 0
     private(set) var fileURL: URL?
     private(set) var textVersion: Int = 0
 
@@ -27,6 +28,7 @@ class EditorViewModel {
             showExternalChangeAlert = false
             loadError = nil
             textVersion += 1
+            activeLine = 0
             startMonitoring()
         } catch {
             loadError = error
@@ -43,6 +45,7 @@ class EditorViewModel {
         loadError = nil
         saveError = nil
         textVersion += 1
+        activeLine = 0
     }
 
     func textDidChange() {
