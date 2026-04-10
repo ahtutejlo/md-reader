@@ -3,16 +3,25 @@ import Testing
 
 @Test func dataLineOnHeadings() {
     let md = """
-    # First
+    # H1
 
-    ## Second
+    ## H2
 
-    ### Third
+    ### H3
+
+    #### H4
+
+    ##### H5
+
+    ###### H6
     """
     let html = MarkdownRenderer.renderHTML(from: md)
-    #expect(html.contains("<h1 data-line=\"0\">First</h1>"))
-    #expect(html.contains("<h2 data-line=\"2\">Second</h2>"))
-    #expect(html.contains("<h3 data-line=\"4\">Third</h3>"))
+    #expect(html.contains("<h1 data-line=\"0\">H1</h1>"))
+    #expect(html.contains("<h2 data-line=\"2\">H2</h2>"))
+    #expect(html.contains("<h3 data-line=\"4\">H3</h3>"))
+    #expect(html.contains("<h4 data-line=\"6\">H4</h4>"))
+    #expect(html.contains("<h5 data-line=\"8\">H5</h5>"))
+    #expect(html.contains("<h6 data-line=\"10\">H6</h6>"))
 }
 
 @Test func dataLineOnParagraph() {
@@ -88,8 +97,18 @@ import Testing
 
     ---
 
+    middle
+
+    ***
+
+    between
+
+    ___
+
     below
     """
     let html = MarkdownRenderer.renderHTML(from: md)
     #expect(html.contains("<hr data-line=\"2\">"))
+    #expect(html.contains("<hr data-line=\"6\">"))
+    #expect(html.contains("<hr data-line=\"10\">"))
 }
