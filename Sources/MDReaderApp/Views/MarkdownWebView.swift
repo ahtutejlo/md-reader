@@ -135,11 +135,53 @@ struct MarkdownWebView: NSViewRepresentable {
         const target = document.getElementById("content");
         const parsed = new DOMParser().parseFromString(html, "text/html");
         const incoming = Array.from(parsed.body.children);
-        target.replaceChildren(...incoming);
-        target.querySelectorAll("pre code").forEach(function(el) {
-            hljs.highlightElement(el);
-        });
+        const oldNodes = Array.from(target.children);
+
+        // Keyed morph: match by data-line, patch in place, only touch changed nodes.
+        let oi = 0;
+        let ni = 0;
+        while (ni < incoming.length) {
+            const newEl = incoming[ni];
+            const newKey = newEl.getAttribute && newEl.getAttribute("data-line");
+
+            if (oi < oldNodes.length) {
+                const oldEl = oldNodes[oi];
+                const oldKey = oldEl.getAttribute && oldEl.getAttribute("data-line");
+
+                if (newKey && newKey === oldKey) {
+                    // Same block — patch only if content changed.
+                    if (oldEl.outerHTML !== newEl.outerHTML) {
+                        oldEl.replaceWith(newEl);
+                        _highlightEl(newEl);
+                    }
+                    oi++;
+                    ni++;
+                } else if (newKey && oldKey && parseInt(newKey) > parseInt(oldKey)) {
+                    // Old node was removed from source — delete it.
+                    oldEl.remove();
+                    oi++;
+                } else {
+                    // New node inserted — add before current old node.
+                    target.insertBefore(newEl, oldNodes[oi] || null);
+                    _highlightEl(newEl);
+                    ni++;
+                }
+            } else {
+                // Remaining new nodes — append.
+                target.appendChild(newEl);
+                _highlightEl(newEl);
+                ni++;
+            }
+        }
+        // Remove leftover old nodes.
+        while (oi < oldNodes.length) {
+            oldNodes[oi].remove();
+            oi++;
+        }
     };
+    function _highlightEl(el) {
+        el.querySelectorAll("pre code").forEach(function(c) { hljs.highlightElement(c); });
+    }
     window.mdScrollToLine = function(line) {
         const blocks = document.querySelectorAll("[data-line]");
         if (!blocks.length) return;
