@@ -72,9 +72,29 @@ struct MarkdownEditorView: NSViewRepresentable {
         var isUpdating = false
         var lastTextVersion: Int = -1
         private var highlightWorkItem: DispatchWorkItem?
+        private var activeLineWorkItem: DispatchWorkItem?
 
         init(viewModel: EditorViewModel) {
             self.viewModel = viewModel
+        }
+
+        func textViewDidChangeSelection(_ notification: Notification) {
+            guard !isUpdating, let textView else { return }
+            let location = textView.selectedRange().location
+            let string = textView.string as NSString
+            var count = 0
+            var idx = 0
+            let limit = min(location, string.length)
+            while idx < limit {
+                if string.character(at: idx) == 10 { count += 1 }  // '\n'
+                idx += 1
+            }
+            activeLineWorkItem?.cancel()
+            let item = DispatchWorkItem { [weak self] in
+                self?.viewModel.activeLine = count
+            }
+            activeLineWorkItem = item
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: item)
         }
 
         func textDidChange(_ notification: Notification) {
