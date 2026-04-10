@@ -28,28 +28,28 @@ enum MarkdownRenderer {
                 continue
             }
 
-            // Headings
-            if line.hasPrefix("######") {
+            // Headings (CommonMark requires a space after the hashes)
+            if line.hasPrefix("###### ") {
                 html.append("<h6 data-line=\"\(i)\">\(inlineMarkdown(String(line.dropFirst(7))))</h6>")
                 i += 1; continue
             }
-            if line.hasPrefix("#####") {
+            if line.hasPrefix("##### ") {
                 html.append("<h5 data-line=\"\(i)\">\(inlineMarkdown(String(line.dropFirst(6))))</h5>")
                 i += 1; continue
             }
-            if line.hasPrefix("####") {
+            if line.hasPrefix("#### ") {
                 html.append("<h4 data-line=\"\(i)\">\(inlineMarkdown(String(line.dropFirst(5))))</h4>")
                 i += 1; continue
             }
-            if line.hasPrefix("###") {
+            if line.hasPrefix("### ") {
                 html.append("<h3 data-line=\"\(i)\">\(inlineMarkdown(String(line.dropFirst(4))))</h3>")
                 i += 1; continue
             }
-            if line.hasPrefix("##") {
+            if line.hasPrefix("## ") {
                 html.append("<h2 data-line=\"\(i)\">\(inlineMarkdown(String(line.dropFirst(3))))</h2>")
                 i += 1; continue
             }
-            if line.hasPrefix("#") {
+            if line.hasPrefix("# ") {
                 html.append("<h1 data-line=\"\(i)\">\(inlineMarkdown(String(line.dropFirst(2))))</h1>")
                 i += 1; continue
             }
@@ -139,7 +139,7 @@ enum MarkdownRenderer {
             var paraLines: [String] = []
             while i < lines.count &&
                   !lines[i].trimmingCharacters(in: .whitespaces).isEmpty &&
-                  !lines[i].hasPrefix("#") &&
+                  lines[i].range(of: #"^#{1,6} "#, options: .regularExpression) == nil &&
                   !lines[i].hasPrefix("```") &&
                   !lines[i].hasPrefix(">") &&
                   !lines[i].hasPrefix("- ") &&

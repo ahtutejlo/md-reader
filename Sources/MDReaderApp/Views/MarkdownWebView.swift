@@ -29,7 +29,7 @@ struct MarkdownWebView: NSViewRepresentable {
     final class Coordinator: NSObject, WKNavigationDelegate {
         weak var webView: WKWebView?
         var isLoaded = false
-        var lastMarkdown: String?
+        var lastMarkdownHash: Int = 0
         var lastActiveLine: Int?
         var pendingMarkdown: String?
         var pendingActiveLine: Int?
@@ -55,9 +55,11 @@ struct MarkdownWebView: NSViewRepresentable {
                 pendingActiveLine = activeLine
                 return
             }
-            let markdownChanged = (markdown != lastMarkdown)
+            let hash = markdown.hashValue
+            let markdownChanged = (hash != lastMarkdownHash)
             let lineChanged = (activeLine != lastActiveLine)
             if markdownChanged {
+                lastMarkdownHash = hash
                 scheduleUpdate(markdown: markdown, thenScrollTo: lineChanged ? activeLine : nil)
             } else if lineChanged {
                 pushScroll(line: activeLine)
@@ -89,7 +91,7 @@ struct MarkdownWebView: NSViewRepresentable {
                     self?.pushScroll(line: line)
                 }
             }
-            lastMarkdown = markdown
+            // textVersion is tracked in onUpdate; no need for string copy here.
         }
 
         private func pushScroll(line: Int) {

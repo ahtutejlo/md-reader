@@ -79,38 +79,39 @@ struct MDReaderApp: App {
                 .disabled(!viewModel.hasUnsavedChanges)
             }
             CommandGroup(after: .textFormatting) {
+                let formattingDisabled = selectedFilePath == nil || viewModel.viewMode == .preview
                 Button("Bold") { viewModel.pendingFormat = .bold }
                     .keyboardShortcut("b", modifiers: .command)
-                    .disabled(selectedFilePath == nil || viewModel.viewMode == .preview)
+                    .disabled(formattingDisabled)
                 Button("Italic") { viewModel.pendingFormat = .italic }
                     .keyboardShortcut("i", modifiers: .command)
-                    .disabled(selectedFilePath == nil || viewModel.viewMode == .preview)
+                    .disabled(formattingDisabled)
                 Button("Link") { viewModel.pendingFormat = .link }
                     .keyboardShortcut("k", modifiers: .command)
-                    .disabled(selectedFilePath == nil || viewModel.viewMode == .preview)
+                    .disabled(formattingDisabled)
                 Button("Inline Code") { viewModel.pendingFormat = .code }
                     .keyboardShortcut("e", modifiers: .command)
-                    .disabled(selectedFilePath == nil || viewModel.viewMode == .preview)
+                    .disabled(formattingDisabled)
                 Divider()
                 Button("Heading 1") { viewModel.pendingFormat = .heading(level: 1) }
                     .keyboardShortcut("1", modifiers: [.command, .shift])
-                    .disabled(selectedFilePath == nil || viewModel.viewMode == .preview)
+                    .disabled(formattingDisabled)
                 Button("Heading 2") { viewModel.pendingFormat = .heading(level: 2) }
                     .keyboardShortcut("2", modifiers: [.command, .shift])
-                    .disabled(selectedFilePath == nil || viewModel.viewMode == .preview)
+                    .disabled(formattingDisabled)
                 Button("Heading 3") { viewModel.pendingFormat = .heading(level: 3) }
                     .keyboardShortcut("3", modifiers: [.command, .shift])
-                    .disabled(selectedFilePath == nil || viewModel.viewMode == .preview)
+                    .disabled(formattingDisabled)
                 Divider()
                 Button("Bulleted List") { viewModel.pendingFormat = .unorderedList }
                     .keyboardShortcut("8", modifiers: [.command, .shift])
-                    .disabled(selectedFilePath == nil || viewModel.viewMode == .preview)
+                    .disabled(formattingDisabled)
                 Button("Numbered List") { viewModel.pendingFormat = .orderedList }
                     .keyboardShortcut("7", modifiers: [.command, .shift])
-                    .disabled(selectedFilePath == nil || viewModel.viewMode == .preview)
+                    .disabled(formattingDisabled)
                 Button("Quote") { viewModel.pendingFormat = .quote }
                     .keyboardShortcut("'", modifiers: [.command, .shift])
-                    .disabled(selectedFilePath == nil || viewModel.viewMode == .preview)
+                    .disabled(formattingDisabled)
             }
             CommandGroup(after: .sidebar) {
                 Button("Toggle Favorite") {

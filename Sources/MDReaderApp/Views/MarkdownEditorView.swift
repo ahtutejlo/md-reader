@@ -53,7 +53,7 @@ struct MarkdownEditorView: NSViewRepresentable {
             viewModel.text = result.text
             viewModel.textDidChange()
             viewModel.pendingFormat = nil
-            return
+            // Fall through to check textVersion in case an external reload happened simultaneously.
         }
 
         // Existing external-text update path. Skip O(n) string comparison via the version counter:
@@ -81,14 +81,12 @@ struct MarkdownEditorView: NSViewRepresentable {
         func textViewDidChangeSelection(_ notification: Notification) {
             guard !isUpdating, let textView else { return }
             let location = textView.selectedRange().location
-            let string = textView.string as NSString
-            var count = 0
-            var idx = 0
-            let limit = min(location, string.length)
-            while idx < limit {
-                if string.character(at: idx) == 10 { count += 1 }  // '\n'
-                idx += 1
-            }
+            let ns = textView.string as NSString
+            let clamped = min(location, ns.length)
+            let lineRange = ns.lineRange(for: NSRange(location: clamped, length: 0))
+            // Count newlines before the start of the current line to get the 0-based line number.
+            let prefix = ns.substring(with: NSRange(location: 0, length: lineRange.location))
+            let count = prefix.components(separatedBy: "\n").count - 1
             activeLineWorkItem?.cancel()
             let item = DispatchWorkItem { [weak self] in
                 self?.viewModel.activeLine = count
