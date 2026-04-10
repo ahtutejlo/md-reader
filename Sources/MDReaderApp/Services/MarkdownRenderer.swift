@@ -14,6 +14,7 @@ enum MarkdownRenderer {
 
             // Fenced code block
             if line.hasPrefix("```") {
+                let blockStart = i
                 let lang = String(line.dropFirst(3)).trimmingCharacters(in: .whitespaces)
                 var codeLines: [String] = []
                 i += 1
@@ -22,34 +23,34 @@ enum MarkdownRenderer {
                     i += 1
                 }
                 let langAttr = lang.isEmpty ? "" : " class=\"language-\(escapeHTML(lang))\""
-                html.append("<pre><code\(langAttr)>\(codeLines.joined(separator: "\n"))</code></pre>")
+                html.append("<pre data-line=\"\(blockStart)\"><code\(langAttr)>\(codeLines.joined(separator: "\n"))</code></pre>")
                 i += 1
                 continue
             }
 
             // Headings
             if line.hasPrefix("######") {
-                html.append("<h6>\(inlineMarkdown(String(line.dropFirst(7))))</h6>")
+                html.append("<h6 data-line=\"\(i)\">\(inlineMarkdown(String(line.dropFirst(7))))</h6>")
                 i += 1; continue
             }
             if line.hasPrefix("#####") {
-                html.append("<h5>\(inlineMarkdown(String(line.dropFirst(6))))</h5>")
+                html.append("<h5 data-line=\"\(i)\">\(inlineMarkdown(String(line.dropFirst(6))))</h5>")
                 i += 1; continue
             }
             if line.hasPrefix("####") {
-                html.append("<h4>\(inlineMarkdown(String(line.dropFirst(5))))</h4>")
+                html.append("<h4 data-line=\"\(i)\">\(inlineMarkdown(String(line.dropFirst(5))))</h4>")
                 i += 1; continue
             }
             if line.hasPrefix("###") {
-                html.append("<h3>\(inlineMarkdown(String(line.dropFirst(4))))</h3>")
+                html.append("<h3 data-line=\"\(i)\">\(inlineMarkdown(String(line.dropFirst(4))))</h3>")
                 i += 1; continue
             }
             if line.hasPrefix("##") {
-                html.append("<h2>\(inlineMarkdown(String(line.dropFirst(3))))</h2>")
+                html.append("<h2 data-line=\"\(i)\">\(inlineMarkdown(String(line.dropFirst(3))))</h2>")
                 i += 1; continue
             }
             if line.hasPrefix("#") {
-                html.append("<h1>\(inlineMarkdown(String(line.dropFirst(2))))</h1>")
+                html.append("<h1 data-line=\"\(i)\">\(inlineMarkdown(String(line.dropFirst(2))))</h1>")
                 i += 1; continue
             }
 
@@ -57,25 +58,27 @@ enum MarkdownRenderer {
             if line.trimmingCharacters(in: .whitespaces) == "---" ||
                line.trimmingCharacters(in: .whitespaces) == "***" ||
                line.trimmingCharacters(in: .whitespaces) == "___" {
-                html.append("<hr>")
+                html.append("<hr data-line=\"\(i)\">")
                 i += 1; continue
             }
 
             // Blockquote
             if line.hasPrefix(">") {
+                let blockStart = i
                 var quoteLines: [String] = []
                 while i < lines.count && lines[i].hasPrefix(">") {
                     let content = String(lines[i].dropFirst(1)).trimmingCharacters(in: .init(charactersIn: " "))
                     quoteLines.append(inlineMarkdown(content))
                     i += 1
                 }
-                html.append("<blockquote><p>\(quoteLines.joined(separator: "<br>"))</p></blockquote>")
+                html.append("<blockquote data-line=\"\(blockStart)\"><p>\(quoteLines.joined(separator: "<br>"))</p></blockquote>")
                 continue
             }
 
             // Unordered list
             if line.hasPrefix("- ") || line.hasPrefix("* ") {
-                html.append("<ul>")
+                let blockStart = i
+                html.append("<ul data-line=\"\(blockStart)\">")
                 while i < lines.count && (lines[i].hasPrefix("- ") || lines[i].hasPrefix("* ")) {
                     let content = String(lines[i].dropFirst(2))
                     html.append("<li>\(inlineMarkdown(content))</li>")
@@ -87,7 +90,8 @@ enum MarkdownRenderer {
 
             // Ordered list
             if let _ = line.range(of: #"^\d+\. "#, options: .regularExpression) {
-                html.append("<ol>")
+                let blockStart = i
+                html.append("<ol data-line=\"\(blockStart)\">")
                 while i < lines.count, let range = lines[i].range(of: #"^\d+\. "#, options: .regularExpression) {
                     let content = String(lines[i][range.upperBound...])
                     html.append("<li>\(inlineMarkdown(content))</li>")
@@ -99,11 +103,12 @@ enum MarkdownRenderer {
 
             // Table
             if isTableStart(lines: lines, at: i) {
+                let blockStart = i
                 let headers = parseTableRow(line)
                 let colCount = headers.count
                 let alignments = parseAlignments(lines[i + 1], count: colCount)
                 i += 2
-                html.append("<table><thead><tr>")
+                html.append("<table data-line=\"\(blockStart)\"><thead><tr>")
                 for (j, h) in headers.enumerated() {
                     let style = alignments[j].isEmpty ? "" : " style=\"text-align:\(alignments[j])\""
                     html.append("<th\(style)>\(inlineMarkdown(h))</th>")
@@ -130,6 +135,7 @@ enum MarkdownRenderer {
             }
 
             // Paragraph
+            let paraStart = i
             var paraLines: [String] = []
             while i < lines.count &&
                   !lines[i].trimmingCharacters(in: .whitespaces).isEmpty &&
@@ -145,7 +151,7 @@ enum MarkdownRenderer {
                 i += 1
             }
             if !paraLines.isEmpty {
-                html.append("<p>\(paraLines.joined(separator: "\n"))</p>")
+                html.append("<p data-line=\"\(paraStart)\">\(paraLines.joined(separator: "\n"))</p>")
             }
         }
 

@@ -9,7 +9,7 @@ import Testing
     | Bob | 25 |
     """
     let html = MarkdownRenderer.renderHTML(from: md)
-    #expect(html.contains("<table>"))
+    #expect(html.contains("<table data-line=\""))
     #expect(html.contains("<thead>"))
     #expect(html.contains("<th>Name</th>"))
     #expect(html.contains("<th>Age</th>"))
@@ -63,7 +63,7 @@ import Testing
     let md = "this | is not | a table"
     let html = MarkdownRenderer.renderHTML(from: md)
     #expect(!html.contains("<table>"))
-    #expect(html.contains("<p>"))
+    #expect(html.contains("<p data-line=\""))
 }
 
 @Test func inlineMarkdownInCells() {
@@ -86,8 +86,8 @@ import Testing
     | a | b |
     """
     let html = MarkdownRenderer.renderHTML(from: md)
-    #expect(html.contains("<p>Some text here.</p>"))
-    #expect(html.contains("<table>"))
+    #expect(html.contains("<p data-line=\"0\">Some text here.</p>"))
+    #expect(html.contains("<table data-line=\""))
     #expect(html.contains("<td>a</td>"))
 }
 
@@ -98,7 +98,7 @@ import Testing
     a | b
     """
     let html = MarkdownRenderer.renderHTML(from: md)
-    #expect(html.contains("<table>"))
+    #expect(html.contains("<table data-line=\""))
     #expect(html.contains("<th>H1</th>"))
     #expect(html.contains("<td>a</td>"))
 }
