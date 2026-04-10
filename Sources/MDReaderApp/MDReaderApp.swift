@@ -30,6 +30,11 @@ struct MDReaderApp: App {
                 openMarkdownFile(fileURL)
             }
             .toolbar {
+                ToolbarItem(placement: .automatic) {
+                    if selectedFilePath != nil && viewModel.viewMode != .preview {
+                        MarkdownFormattingToolbar(viewModel: viewModel)
+                    }
+                }
                 ToolbarItem {
                     Picker("View Mode", selection: $viewModel.viewMode) {
                         ForEach(ViewMode.allCases, id: \.self) { mode in
@@ -72,6 +77,41 @@ struct MDReaderApp: App {
                 }
                 .keyboardShortcut("s", modifiers: .command)
                 .disabled(!viewModel.hasUnsavedChanges)
+            }
+            CommandGroup(after: .textFormatting) {
+                let formattingDisabled = selectedFilePath == nil || viewModel.viewMode == .preview
+                Button("Bold") { viewModel.pendingFormat = .bold }
+                    .keyboardShortcut("b", modifiers: .command)
+                    .disabled(formattingDisabled)
+                Button("Italic") { viewModel.pendingFormat = .italic }
+                    .keyboardShortcut("i", modifiers: .command)
+                    .disabled(formattingDisabled)
+                Button("Link") { viewModel.pendingFormat = .link }
+                    .keyboardShortcut("k", modifiers: .command)
+                    .disabled(formattingDisabled)
+                Button("Inline Code") { viewModel.pendingFormat = .code }
+                    .keyboardShortcut("e", modifiers: .command)
+                    .disabled(formattingDisabled)
+                Divider()
+                Button("Heading 1") { viewModel.pendingFormat = .heading(level: 1) }
+                    .keyboardShortcut("1", modifiers: [.command, .shift])
+                    .disabled(formattingDisabled)
+                Button("Heading 2") { viewModel.pendingFormat = .heading(level: 2) }
+                    .keyboardShortcut("2", modifiers: [.command, .shift])
+                    .disabled(formattingDisabled)
+                Button("Heading 3") { viewModel.pendingFormat = .heading(level: 3) }
+                    .keyboardShortcut("3", modifiers: [.command, .shift])
+                    .disabled(formattingDisabled)
+                Divider()
+                Button("Bulleted List") { viewModel.pendingFormat = .unorderedList }
+                    .keyboardShortcut("8", modifiers: [.command, .shift])
+                    .disabled(formattingDisabled)
+                Button("Numbered List") { viewModel.pendingFormat = .orderedList }
+                    .keyboardShortcut("7", modifiers: [.command, .shift])
+                    .disabled(formattingDisabled)
+                Button("Quote") { viewModel.pendingFormat = .quote }
+                    .keyboardShortcut("'", modifiers: [.command, .shift])
+                    .disabled(formattingDisabled)
             }
             CommandGroup(after: .sidebar) {
                 Button("Toggle Favorite") {

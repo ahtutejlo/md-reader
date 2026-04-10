@@ -35,10 +35,29 @@ struct MarkdownEditorView: NSViewRepresentable {
 
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         let textView = scrollView.documentView as! NSTextView
-        // Use version counter to avoid O(n) string comparison on every SwiftUI render.
+
+        // Consume any pending format command from the toolbar/menu before
+        // checking the textVersion path. This runs whenever SwiftUI re-invokes
+        // updateNSView and the view model has a queued action.
+        if let action = viewModel.pendingFormat {
+            let result = MarkdownFormatter.apply(
+                action,
+                to: textView.string,
+                selection: textView.selectedRange()
+            )
+            context.coordinator.isUpdating = true
+            textView.string = result.text
+            textView.selectedRange = result.selection
+            context.coordinator.applyHighlighting()
+            context.coordinator.isUpdating = false
+            viewModel.text = result.text
+            viewModel.textDidChange()
+            viewModel.pendingFormat = nil
+            // Fall through to check textVersion in case an external reload happened simultaneously.
+        }
+
+        // Existing external-text update path. Skip O(n) string comparison via the version counter:
         // textVersion increments only on external text changes (loadFile, reloadFromDisk, clearFile).
-        // User typing updates viewModel.text but not textVersion, so we skip the NSView update —
-        // the NSTextView already has the correct content and highlighting is handled by textDidChange.
         guard context.coordinator.lastTextVersion != viewModel.textVersion else { return }
         context.coordinator.lastTextVersion = viewModel.textVersion
         context.coordinator.isUpdating = true
@@ -53,9 +72,27 @@ struct MarkdownEditorView: NSViewRepresentable {
         var isUpdating = false
         var lastTextVersion: Int = -1
         private var highlightWorkItem: DispatchWorkItem?
+        private var activeLineWorkItem: DispatchWorkItem?
 
         init(viewModel: EditorViewModel) {
             self.viewModel = viewModel
+        }
+
+        func textViewDidChangeSelection(_ notification: Notification) {
+            guard !isUpdating, let textView else { return }
+            let location = textView.selectedRange().location
+            let ns = textView.string as NSString
+            let clamped = min(location, ns.length)
+            let lineRange = ns.lineRange(for: NSRange(location: clamped, length: 0))
+            // Count newlines before the start of the current line to get the 0-based line number.
+            let prefix = ns.substring(with: NSRange(location: 0, length: lineRange.location))
+            let count = prefix.components(separatedBy: "\n").count - 1
+            activeLineWorkItem?.cancel()
+            let item = DispatchWorkItem { [weak self] in
+                self?.viewModel.activeLine = count
+            }
+            activeLineWorkItem = item
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: item)
         }
 
         func textDidChange(_ notification: Notification) {
