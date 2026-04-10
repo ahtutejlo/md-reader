@@ -157,6 +157,19 @@ import Foundation
     #expect(result.text == "apple\nbanana")
 }
 
+@Test func orderedListPreservesCursorOnFirstLine() {
+    // Cursor is mid-line on "apple" at position 2 (the "p" between "a" and "p").
+    // After numbering, the line becomes "1. apple" so the cursor should shift
+    // to position 5 (still on the same character).
+    let result = MarkdownFormatter.apply(
+        .orderedList,
+        to: "apple\nbanana",
+        selection: NSRange(location: 2, length: 0)
+    )
+    #expect(result.text == "1. apple\nbanana")
+    #expect(result.selection == NSRange(location: 5, length: 0))
+}
+
 @Test func quoteMultiline() {
     let result = MarkdownFormatter.apply(
         .quote,

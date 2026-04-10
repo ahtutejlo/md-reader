@@ -211,10 +211,14 @@ enum MarkdownFormatter {
 
         let joined = newLines.joined(separator: "\n") + (hasTrailingNewline ? "\n" : "")
         let newText = ns.replacingCharacters(in: lineRange, with: joined)
-        let delta = (joined as NSString).length - (block as NSString).length
+        let firstLineDelta = (newLines.first.map { ($0 as NSString).length } ?? 0)
+                           - (lines.first.map { ($0 as NSString).length } ?? 0)
+        let totalDelta = (joined as NSString).length - (block as NSString).length
+        let newLocation = max(0, selection.location + firstLineDelta)
+        let newLength = max(0, selection.length + (totalDelta - firstLineDelta))
         return FormattedResult(
             text: newText,
-            selection: NSRange(location: selection.location, length: max(0, selection.length + delta))
+            selection: NSRange(location: newLocation, length: newLength)
         )
     }
 
