@@ -2,7 +2,7 @@ import SwiftUI
 import WebKit
 
 struct MarkdownWebView: NSViewRepresentable {
-    let markdown: String
+    @Bindable var viewModel: EditorViewModel
 
     func makeNSView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
@@ -12,7 +12,7 @@ struct MarkdownWebView: NSViewRepresentable {
     }
 
     func updateNSView(_ webView: WKWebView, context: Context) {
-        let html = buildHTML(from: markdown)
+        let html = buildHTML(from: viewModel.text)
         webView.loadHTMLString(html, baseURL: nil)
     }
 

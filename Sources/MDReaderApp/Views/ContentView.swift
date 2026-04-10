@@ -22,12 +22,12 @@ struct ContentView: View {
                         HSplitView {
                             MarkdownEditorView(viewModel: viewModel)
                                 .frame(minWidth: 200)
-                            MarkdownWebView(markdown: viewModel.text)
+                            MarkdownWebView(viewModel: viewModel)
                                 .frame(minWidth: 200)
                         }
 
                     case .preview:
-                        MarkdownWebView(markdown: viewModel.text)
+                        MarkdownWebView(viewModel: viewModel)
                     }
                 }
             } else {
