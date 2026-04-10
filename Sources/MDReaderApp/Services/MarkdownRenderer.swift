@@ -13,12 +13,13 @@ enum MarkdownRenderer {
             let line = lines[i]
 
             // Fenced code block
-            if line.hasPrefix("```") {
+            let trimmedLine = line.trimmingCharacters(in: .whitespaces)
+            if trimmedLine.hasPrefix("```") {
                 let blockStart = i
-                let lang = String(line.dropFirst(3)).trimmingCharacters(in: .whitespaces)
+                let lang = String(trimmedLine.dropFirst(3)).trimmingCharacters(in: .whitespaces)
                 var codeLines: [String] = []
                 i += 1
-                while i < lines.count && !lines[i].hasPrefix("```") {
+                while i < lines.count && !lines[i].trimmingCharacters(in: .whitespaces).hasPrefix("```") {
                     codeLines.append(escapeHTML(lines[i]))
                     i += 1
                 }
