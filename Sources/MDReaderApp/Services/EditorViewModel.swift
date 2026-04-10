@@ -86,6 +86,7 @@ class EditorViewModel {
         showExternalChangeAlert = false
         isReloading = false
         textVersion += 1
+        activeLine = 0
     }
 
     func dismissExternalChange() {
