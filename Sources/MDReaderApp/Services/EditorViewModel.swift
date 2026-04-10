@@ -8,6 +8,7 @@ class EditorViewModel {
     var showExternalChangeAlert: Bool = false
     var loadError: Error?
     var saveError: Error?
+    var pendingFormat: MarkdownFormatAction?
     private(set) var fileURL: URL?
     private(set) var textVersion: Int = 0
 
