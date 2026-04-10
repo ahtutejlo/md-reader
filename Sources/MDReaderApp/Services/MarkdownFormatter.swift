@@ -169,7 +169,8 @@ enum MarkdownFormatter {
         // Cursor math: the cursor sits inside the first selected line, so shift its
         // location by the delta applied to that first line. Any extra delta on
         // following lines lands in the trailing length.
-        let firstLineDelta = (newLines.first?.count ?? 0) - (lines.first?.count ?? 0)
+        let firstLineDelta = (newLines.first.map { ($0 as NSString).length } ?? 0)
+                           - (lines.first.map { ($0 as NSString).length } ?? 0)
         let totalDelta = (joined as NSString).length - (block as NSString).length
         let newLocation = max(0, selection.location + firstLineDelta)
         let newLength = max(0, selection.length + (totalDelta - firstLineDelta))
@@ -220,6 +221,7 @@ enum MarkdownFormatter {
     // MARK: - Code block helper
 
     private static func wrapCodeBlock(_ text: String, selection: NSRange) -> FormattedResult {
+        // codeBlock intentionally does not toggle — a second apply produces nested fences.
         let ns = text as NSString
         let lineRange = ns.lineRange(for: selection)
         var block = ns.substring(with: lineRange)

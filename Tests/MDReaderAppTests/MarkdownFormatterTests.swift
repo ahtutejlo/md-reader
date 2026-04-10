@@ -148,6 +148,15 @@ import Foundation
     #expect(result.text == "1. apple\n2. banana\n3. cherry")
 }
 
+@Test func orderedListToggleRemoves() {
+    let result = MarkdownFormatter.apply(
+        .orderedList,
+        to: "1. apple\n2. banana",
+        selection: NSRange(location: 0, length: 18)
+    )
+    #expect(result.text == "apple\nbanana")
+}
+
 @Test func quoteMultiline() {
     let result = MarkdownFormatter.apply(
         .quote,
