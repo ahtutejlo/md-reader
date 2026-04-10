@@ -38,20 +38,14 @@ struct MarkdownWebView: NSViewRepresentable {
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             isLoaded = true
-            if let md = pendingMarkdown {
-                pushUpdate(markdown: md)
-                pendingMarkdown = nil
-            }
-            // Known limitation: pushScroll runs against the still-empty #content
-            // div because pushUpdate's evaluateJavaScript hasn't completed yet, so
-            // mdScrollToLine returns early and the pending scroll is dropped.
-            // This is invisible on first launch (activeLine starts at 0). If the
-            // view is ever re-created mid-session with a non-zero activeLine and
-            // the scroll matters, fix by chaining pushScroll into the completion
-            // handler of pushUpdate.
-            if let line = pendingActiveLine {
+            let md = pendingMarkdown
+            let line = pendingActiveLine
+            pendingMarkdown = nil
+            pendingActiveLine = nil
+            if let md {
+                pushUpdate(markdown: md, thenScrollTo: line)
+            } else if let line {
                 pushScroll(line: line)
-                pendingActiveLine = nil
             }
         }
 
@@ -61,24 +55,25 @@ struct MarkdownWebView: NSViewRepresentable {
                 pendingActiveLine = activeLine
                 return
             }
-            if markdown != lastMarkdown {
-                scheduleUpdate(markdown: markdown)
-            }
-            if activeLine != lastActiveLine {
+            let markdownChanged = (markdown != lastMarkdown)
+            let lineChanged = (activeLine != lastActiveLine)
+            if markdownChanged {
+                scheduleUpdate(markdown: markdown, thenScrollTo: lineChanged ? activeLine : nil)
+            } else if lineChanged {
                 pushScroll(line: activeLine)
             }
         }
 
-        private func scheduleUpdate(markdown: String) {
+        private func scheduleUpdate(markdown: String, thenScrollTo scrollLine: Int?) {
             updateWorkItem?.cancel()
             let item = DispatchWorkItem { [weak self] in
-                self?.pushUpdate(markdown: markdown)
+                self?.pushUpdate(markdown: markdown, thenScrollTo: scrollLine)
             }
             updateWorkItem = item
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1, execute: item)
         }
 
-        private func pushUpdate(markdown: String) {
+        private func pushUpdate(markdown: String, thenScrollTo scrollLine: Int?) {
             guard let webView else { return }
             let html = MarkdownRenderer.renderHTML(from: markdown)
             guard let encoded = jsStringLiteral(html) else {
@@ -89,6 +84,9 @@ struct MarkdownWebView: NSViewRepresentable {
             webView.evaluateJavaScript(script) { [weak self] _, error in
                 if let error {
                     self?.log.error("mdUpdate failed: \(error.localizedDescription)")
+                }
+                if let line = scrollLine {
+                    self?.pushScroll(line: line)
                 }
             }
             lastMarkdown = markdown
