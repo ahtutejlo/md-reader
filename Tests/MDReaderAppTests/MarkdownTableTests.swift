@@ -1,8 +1,6 @@
 import Testing
 @testable import MDReaderApp
 
-private let view = MarkdownWebView(markdown: "")
-
 @Test func basicTable() {
     let md = """
     | Name | Age |
@@ -10,7 +8,7 @@ private let view = MarkdownWebView(markdown: "")
     | Alice | 30 |
     | Bob | 25 |
     """
-    let html = view.markdownToHTML(md)
+    let html = MarkdownRenderer.renderHTML(from: md)
     #expect(html.contains("<table>"))
     #expect(html.contains("<thead>"))
     #expect(html.contains("<th>Name</th>"))
@@ -27,7 +25,7 @@ private let view = MarkdownWebView(markdown: "")
     | :--- | :---: | ---: |
     | a | b | c |
     """
-    let html = view.markdownToHTML(md)
+    let html = MarkdownRenderer.renderHTML(from: md)
     #expect(html.contains("<th style=\"text-align:left\">Left</th>"))
     #expect(html.contains("<th style=\"text-align:center\">Center</th>"))
     #expect(html.contains("<th style=\"text-align:right\">Right</th>"))
@@ -42,7 +40,7 @@ private let view = MarkdownWebView(markdown: "")
     | --- | --- |
     | a \\| b | yes |
     """
-    let html = view.markdownToHTML(md)
+    let html = MarkdownRenderer.renderHTML(from: md)
     #expect(html.contains("<td>a | b</td>"))
     #expect(html.contains("<td>yes</td>"))
 }
@@ -54,7 +52,7 @@ private let view = MarkdownWebView(markdown: "")
     | 1 |
     | 1 | 2 | 3 | 4 |
     """
-    let html = view.markdownToHTML(md)
+    let html = MarkdownRenderer.renderHTML(from: md)
     // Row with fewer cells should be padded
     #expect(html.contains("<td>1</td>\n<td></td>\n<td></td>"))
     // Row with extra cells should be trimmed — no "4" in output
@@ -63,7 +61,7 @@ private let view = MarkdownWebView(markdown: "")
 
 @Test func noFalsePositiveOnPipeInText() {
     let md = "this | is not | a table"
-    let html = view.markdownToHTML(md)
+    let html = MarkdownRenderer.renderHTML(from: md)
     #expect(!html.contains("<table>"))
     #expect(html.contains("<p>"))
 }
@@ -74,7 +72,7 @@ private let view = MarkdownWebView(markdown: "")
     | --- | --- |
     | **bold** | `done` |
     """
-    let html = view.markdownToHTML(md)
+    let html = MarkdownRenderer.renderHTML(from: md)
     #expect(html.contains("<td><strong>bold</strong></td>"))
     #expect(html.contains("<td><code>done</code></td>"))
 }
@@ -87,7 +85,7 @@ private let view = MarkdownWebView(markdown: "")
     | --- | --- |
     | a | b |
     """
-    let html = view.markdownToHTML(md)
+    let html = MarkdownRenderer.renderHTML(from: md)
     #expect(html.contains("<p>Some text here.</p>"))
     #expect(html.contains("<table>"))
     #expect(html.contains("<td>a</td>"))
@@ -99,7 +97,7 @@ private let view = MarkdownWebView(markdown: "")
     --- | ---
     a | b
     """
-    let html = view.markdownToHTML(md)
+    let html = MarkdownRenderer.renderHTML(from: md)
     #expect(html.contains("<table>"))
     #expect(html.contains("<th>H1</th>"))
     #expect(html.contains("<td>a</td>"))
