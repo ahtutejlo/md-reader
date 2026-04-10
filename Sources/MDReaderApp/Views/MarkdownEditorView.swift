@@ -35,10 +35,29 @@ struct MarkdownEditorView: NSViewRepresentable {
 
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         let textView = scrollView.documentView as! NSTextView
-        // Use version counter to avoid O(n) string comparison on every SwiftUI render.
+
+        // Consume any pending format command from the toolbar/menu before
+        // checking the textVersion path. This runs whenever SwiftUI re-invokes
+        // updateNSView and the view model has a queued action.
+        if let action = viewModel.pendingFormat {
+            let result = MarkdownFormatter.apply(
+                action,
+                to: textView.string,
+                selection: textView.selectedRange()
+            )
+            context.coordinator.isUpdating = true
+            textView.string = result.text
+            textView.selectedRange = result.selection
+            context.coordinator.applyHighlighting()
+            context.coordinator.isUpdating = false
+            viewModel.text = result.text
+            viewModel.textDidChange()
+            viewModel.pendingFormat = nil
+            return
+        }
+
+        // Existing external-text update path. Skip O(n) string comparison via the version counter:
         // textVersion increments only on external text changes (loadFile, reloadFromDisk, clearFile).
-        // User typing updates viewModel.text but not textVersion, so we skip the NSView update —
-        // the NSTextView already has the correct content and highlighting is handled by textDidChange.
         guard context.coordinator.lastTextVersion != viewModel.textVersion else { return }
         context.coordinator.lastTextVersion = viewModel.textVersion
         context.coordinator.isUpdating = true
