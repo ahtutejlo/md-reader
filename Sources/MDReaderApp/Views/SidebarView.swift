@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct SidebarView: View {
@@ -69,11 +70,17 @@ struct FileRow: View {
                     .buttonStyle(.plain)
                 }
             }
+            Text(file.displayPath)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .truncationMode(.middle)
             Text(file.lastOpened, style: .relative)
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
         .padding(.vertical, 2)
+        .help(file.path)
         .onHover { hovering in
             isHovering = hovering
         }
