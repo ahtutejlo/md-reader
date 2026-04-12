@@ -14,6 +14,18 @@ struct CachedFile: Identifiable, Codable, Equatable {
         FileManager.default.fileExists(atPath: path)
     }
 
+    var displayPath: String {
+        let home = NSHomeDirectory()
+        if path == home {
+            return "~"
+        }
+        let prefix = home + "/"
+        if path.hasPrefix(prefix) {
+            return "~/" + path.dropFirst(prefix.count)
+        }
+        return path
+    }
+
     enum CodingKeys: String, CodingKey {
         case path, lastOpened, isFavorite
     }
