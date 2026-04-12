@@ -37,6 +37,7 @@ struct SidebarView: View {
                         Button("Reveal in Finder") {
                             NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: file.path)])
                         }
+                        .disabled(!file.exists)
                         Divider()
                         Button("Remove from List", role: .destructive) {
                             onRemove(file)
