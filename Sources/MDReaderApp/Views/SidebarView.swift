@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct SidebarView: View {
@@ -33,6 +34,11 @@ struct SidebarView: View {
             List(filteredFiles, selection: $selectedFilePath) { file in
                 FileRow(file: file, onToggleFavorite: { onToggleFavorite(file.path) })
                     .contextMenu {
+                        Button("Reveal in Finder") {
+                            NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: file.path)])
+                        }
+                        .disabled(!file.exists)
+                        Divider()
                         Button("Remove from List", role: .destructive) {
                             onRemove(file)
                         }
@@ -69,11 +75,17 @@ struct FileRow: View {
                     .buttonStyle(.plain)
                 }
             }
+            Text(file.displayPath)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .truncationMode(.middle)
             Text(file.lastOpened, style: .relative)
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
         .padding(.vertical, 2)
+        .help(file.path)
         .onHover { hovering in
             isHovering = hovering
         }
