@@ -113,17 +113,37 @@ class EditorViewModel {
 
         let source = DispatchSource.makeFileSystemObjectSource(
             fileDescriptor: fd,
-            eventMask: [.write, .rename],
+            eventMask: [.write, .rename, .delete],
             queue: .main
         )
-        source.setEventHandler { [weak self] in
-            self?.handleExternalChange()
+        source.setEventHandler { [weak self, weak source] in
+            guard let self, let source else { return }
+            let events = source.data
+            self.handleExternalChange()
+            // Atomic writes (rename/delete) orphan the fd — re-establish on the path.
+            if events.contains(.rename) || events.contains(.delete) {
+                self.reopenMonitoring(attempt: 0)
+            }
         }
         source.setCancelHandler {
             close(fd)
         }
         source.resume()
         fileMonitor = source
+    }
+
+    private func reopenMonitoring(attempt: Int) {
+        fileMonitor?.cancel()
+        fileMonitor = nil
+        guard let url = fileURL else { return }
+        if !FileManager.default.fileExists(atPath: url.path) {
+            guard attempt < 3 else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+                self?.reopenMonitoring(attempt: attempt + 1)
+            }
+            return
+        }
+        startMonitoring()
     }
 
     private func stopMonitoring() {
