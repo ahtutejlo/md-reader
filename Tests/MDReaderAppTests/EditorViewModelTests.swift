@@ -65,6 +65,36 @@ import Foundation
     #expect(vm.hasUnsavedChanges == false)
 }
 
+@Test @MainActor func externalChangeViaAtomicRenameReloads() async throws {
+    let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("test-\(UUID()).md")
+    try "A".write(to: tmp, atomically: true, encoding: .utf8)
+    defer { try? FileManager.default.removeItem(at: tmp) }
+
+    let vm = EditorViewModel()
+    vm.loadFile(url: tmp)
+
+    // `atomically: true` writes to a temp file then renames — the same pattern
+    // Claude Code, VS Code, and Obsidian use. Must survive two consecutive writes.
+    try "B".write(to: tmp, atomically: true, encoding: .utf8)
+    try await waitUntil(timeout: .seconds(1)) { vm.text == "B" }
+
+    try "C".write(to: tmp, atomically: true, encoding: .utf8)
+    try await waitUntil(timeout: .seconds(1)) { vm.text == "C" }
+}
+
+@MainActor
+private func waitUntil(
+    timeout: Duration,
+    condition: @escaping () -> Bool
+) async throws {
+    let deadline = ContinuousClock.now.advanced(by: timeout)
+    while ContinuousClock.now < deadline {
+        if condition() { return }
+        try await Task.sleep(for: .milliseconds(20))
+    }
+    #expect(condition())
+}
+
 @Test func externalChangeWithUnsaved() throws {
     let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("test-\(UUID()).md")
     try "original".write(to: tmp, atomically: true, encoding: .utf8)
