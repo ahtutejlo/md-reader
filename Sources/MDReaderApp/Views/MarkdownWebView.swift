@@ -11,23 +11,27 @@ struct MarkdownWebView: NSViewRepresentable {
 
     func makeNSView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
+        config.userContentController.add(context.coordinator, name: "mdToggleTask")
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.setValue(false, forKey: "drawsBackground")
         webView.navigationDelegate = context.coordinator
         context.coordinator.webView = webView
+        context.coordinator.viewModel = viewModel
         webView.loadHTMLString(Self.shellHTML, baseURL: nil)
         return webView
     }
 
     func updateNSView(_ webView: WKWebView, context: Context) {
+        context.coordinator.viewModel = viewModel
         context.coordinator.onUpdate(
             markdown: viewModel.text,
             activeLine: viewModel.activeLine
         )
     }
 
-    final class Coordinator: NSObject, WKNavigationDelegate {
+    final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
         weak var webView: WKWebView?
+        weak var viewModel: EditorViewModel?
         var isLoaded = false
         var lastMarkdownHash: Int = 0
         var lastActiveLine: Int?
@@ -104,6 +108,15 @@ struct MarkdownWebView: NSViewRepresentable {
             lastActiveLine = line
         }
 
+        // MARK: - WKScriptMessageHandler
+
+        func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
+            guard message.name == "mdToggleTask",
+                  let body = message.body as? [String: Any],
+                  let line = body["line"] as? Int else { return }
+            viewModel?.toggleTaskAt(line: line)
+        }
+
         /// Encodes a Swift String as a valid JavaScript string literal via JSON.
         private func jsStringLiteral(_ s: String) -> String? {
             guard let data = try? JSONSerialization.data(withJSONObject: [s], options: []),
@@ -142,9 +155,26 @@ struct MarkdownWebView: NSViewRepresentable {
             target.querySelectorAll("pre code").forEach(function(el) {
                 hljs.highlightElement(el);
             });
+            target.querySelectorAll("li.task-list-item > input[type='checkbox']").forEach(function(input) {
+                input.removeAttribute("disabled");
+                input.tabIndex = -1;
+                input.addEventListener("click", onTaskCheckboxClick);
+            });
             document.documentElement.scrollTop = scrollY;
         });
     };
+    function onTaskCheckboxClick(e) {
+        const input = e.currentTarget;
+        const li = input.closest("li.task-list-item");
+        if (!li) return;
+        const lineAttr = li.getAttribute("data-md-line");
+        if (lineAttr == null) return;
+        // Optimistic visual update; the markdown re-render will confirm it.
+        li.classList.toggle("checked", input.checked);
+        if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.mdToggleTask) {
+            window.webkit.messageHandlers.mdToggleTask.postMessage({ line: parseInt(lineAttr, 10) });
+        }
+    }
     window.mdScrollToLine = function(line) {
         const blocks = document.querySelectorAll("[data-line]");
         if (!blocks.length) return;
@@ -350,14 +380,17 @@ struct MarkdownWebView: NSViewRepresentable {
         appearance: none;
         -webkit-appearance: none;
         flex: 0 0 auto;
-        width: 14px;
-        height: 14px;
+        width: 0.95em;
+        height: 0.95em;
         margin: 0;
         border: 1.5px solid var(--border-strong);
         border-radius: 3px;
         background: transparent;
-        transform: translateY(2px);
-        cursor: default;
+        cursor: pointer;
+        transition: background 120ms ease, border-color 120ms ease;
+    }
+    li.task-list-item > input[type="checkbox"]:hover {
+        border-color: var(--accent);
     }
     li.task-list-item.checked > input[type="checkbox"] {
         background: var(--accent);

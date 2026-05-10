@@ -93,6 +93,24 @@ class EditorViewModel {
         showExternalChangeAlert = false
     }
 
+    /// Toggle the GFM task marker (`[ ]` ↔ `[x]`) on the given 0-based source line.
+    /// Triggered by clicks on rendered checkboxes in the preview WebView.
+    func toggleTaskAt(line: Int) {
+        var lines = text.components(separatedBy: "\n")
+        guard lines.indices.contains(line) else { return }
+        let source = lines[line]
+        guard let regex = try? NSRegularExpression(pattern: #"^[ \t]*[-*]\s+\[([ xX])\]"#),
+              let match = regex.firstMatch(in: source, range: NSRange(source.startIndex..., in: source)),
+              let markerRange = Range(match.range(at: 1), in: source)
+        else { return }
+        let newMarker: Character = (source[markerRange] == " ") ? "x" : " "
+        var newLine = source
+        newLine.replaceSubrange(markerRange, with: String(newMarker))
+        lines[line] = newLine
+        text = lines.joined(separator: "\n")
+        textDidChange()
+    }
+
     // MARK: - Auto-save
 
     private func scheduleAutoSave() {
