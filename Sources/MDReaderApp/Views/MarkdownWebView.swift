@@ -336,6 +336,42 @@ struct MarkdownWebView: NSViewRepresentable {
     li::marker { color: var(--text-subtle); }
     ul ul, ol ol, ul ol, ol ul { margin: 0.25em 0 0.4em; }
 
+    /* GFM task lists */
+    ul.contains-task-list { padding-left: 0.4em; list-style: none; }
+    ul.contains-task-list ul { padding-left: 1.45em; }
+    li.task-list-item {
+        list-style: none;
+        padding-left: 0;
+        display: flex;
+        align-items: baseline;
+        gap: 0.55em;
+    }
+    li.task-list-item > input[type="checkbox"] {
+        appearance: none;
+        -webkit-appearance: none;
+        flex: 0 0 auto;
+        width: 14px;
+        height: 14px;
+        margin: 0;
+        border: 1.5px solid var(--border-strong);
+        border-radius: 3px;
+        background: transparent;
+        transform: translateY(2px);
+        cursor: default;
+    }
+    li.task-list-item.checked > input[type="checkbox"] {
+        background: var(--accent);
+        border-color: var(--accent);
+        background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path fill='none' stroke='white' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' d='M3.5 8.4l3 3 6-6.4'/></svg>");
+        background-size: 100% 100%;
+        background-repeat: no-repeat;
+    }
+    li.task-list-item.checked {
+        color: var(--text-muted);
+        text-decoration: line-through;
+        text-decoration-color: color-mix(in oklab, var(--text-muted) 55%, transparent);
+    }
+
     /* Horizontal rule — subtle divider */
     hr {
         border: none;

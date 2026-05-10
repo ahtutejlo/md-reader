@@ -76,15 +76,26 @@ enum MarkdownRenderer {
                 continue
             }
 
-            // Unordered list
+            // Unordered list (with GFM task list support)
             if line.hasPrefix("- ") || line.hasPrefix("* ") {
                 let blockStart = i
-                html.append("<ul data-line=\"\(blockStart)\">")
+                var hasTasks = false
+                var items: [String] = []
                 while i < lines.count && (lines[i].hasPrefix("- ") || lines[i].hasPrefix("* ")) {
                     let content = String(lines[i].dropFirst(2))
-                    html.append("<li>\(inlineMarkdown(content))</li>")
+                    if let task = parseTaskListItem(content) {
+                        hasTasks = true
+                        let checkedAttr = task.checked ? " checked" : ""
+                        let itemClass = task.checked ? "task-list-item checked" : "task-list-item"
+                        items.append("<li class=\"\(itemClass)\"><input type=\"checkbox\" disabled\(checkedAttr)>\(inlineMarkdown(task.text))</li>")
+                    } else {
+                        items.append("<li>\(inlineMarkdown(content))</li>")
+                    }
                     i += 1
                 }
+                let ulClass = hasTasks ? " class=\"contains-task-list\"" : ""
+                html.append("<ul\(ulClass) data-line=\"\(blockStart)\">")
+                html.append(contentsOf: items)
                 html.append("</ul>")
                 continue
             }
@@ -157,6 +168,26 @@ enum MarkdownRenderer {
         }
 
         return html.joined(separator: "\n")
+    }
+
+    /// Parses a list-item body for a GFM task marker: `[ ] text`, `[x] text`, `[X] text`.
+    /// Returns nil if the body is not a task list item.
+    private static func parseTaskListItem(_ content: String) -> (checked: Bool, text: String)? {
+        guard content.count >= 4 else { return nil }
+        let chars = Array(content)
+        guard chars[0] == "[",
+              chars[2] == "]",
+              chars[3] == " " || (chars.count == 3 && chars[2] == "]")
+        else { return nil }
+        let marker = chars[1]
+        let checked: Bool
+        switch marker {
+        case " ": checked = false
+        case "x", "X": checked = true
+        default: return nil
+        }
+        let text = String(chars.dropFirst(4))
+        return (checked, text)
     }
 
     private static func isTableStart(lines: [String], at i: Int) -> Bool {
