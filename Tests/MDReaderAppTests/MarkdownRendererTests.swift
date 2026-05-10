@@ -91,6 +91,70 @@ import Testing
     #expect(html.contains("<table data-line=\"2\">"))
 }
 
+@Test func taskListUnchecked() {
+    let md = "- [ ] todo item"
+    let html = MarkdownRenderer.renderHTML(from: md)
+    #expect(html.contains("<ul class=\"contains-task-list\""))
+    #expect(html.contains("<li class=\"task-list-item\" data-md-line=\"0\"><input type=\"checkbox\" disabled>todo item</li>"))
+}
+
+@Test func taskListChecked() {
+    let md = "- [x] done item"
+    let html = MarkdownRenderer.renderHTML(from: md)
+    #expect(html.contains("<li class=\"task-list-item checked\" data-md-line=\"0\"><input type=\"checkbox\" disabled checked>done item</li>"))
+}
+
+@Test func taskListCheckedCapital() {
+    let md = "- [X] done item"
+    let html = MarkdownRenderer.renderHTML(from: md)
+    #expect(html.contains("<input type=\"checkbox\" disabled checked>done item"))
+}
+
+@Test func taskListMixed() {
+    let md = """
+    - [ ] one
+    - [x] two
+    - three
+    """
+    let html = MarkdownRenderer.renderHTML(from: md)
+    #expect(html.contains("<ul class=\"contains-task-list\""))
+    #expect(html.contains("<li class=\"task-list-item\" data-md-line=\"0\"><input type=\"checkbox\" disabled>one</li>"))
+    #expect(html.contains("<li class=\"task-list-item checked\" data-md-line=\"1\"><input type=\"checkbox\" disabled checked>two</li>"))
+    #expect(html.contains("<li>three</li>"))
+}
+
+@Test func taskListRespectsInlineMarkdown() {
+    let md = "- [x] **bold** task"
+    let html = MarkdownRenderer.renderHTML(from: md)
+    #expect(html.contains("<strong>bold</strong> task</li>"))
+}
+
+@Test func plainBracketIsNotTaskList() {
+    let md = "- [link](https://example.com)"
+    let html = MarkdownRenderer.renderHTML(from: md)
+    #expect(!html.contains("contains-task-list"))
+    #expect(html.contains("<a href=\"https://example.com\">link</a>"))
+}
+
+@Test func taskListWithAsteriskBullet() {
+    let md = "* [x] starred task"
+    let html = MarkdownRenderer.renderHTML(from: md)
+    #expect(html.contains("<ul class=\"contains-task-list\""))
+    #expect(html.contains("<li class=\"task-list-item checked\" data-md-line=\"0\"><input type=\"checkbox\" disabled checked>starred task</li>"))
+}
+
+@Test func taskListAcceptsTabAfterMarker() {
+    let md = "- [x]\tafter tab"
+    let html = MarkdownRenderer.renderHTML(from: md)
+    #expect(html.contains("<li class=\"task-list-item checked\" data-md-line=\"0\"><input type=\"checkbox\" disabled checked>"))
+}
+
+@Test func taskListWithoutTrailingText() {
+    let md = "- [ ]"
+    let html = MarkdownRenderer.renderHTML(from: md)
+    #expect(html.contains("<li class=\"task-list-item\" data-md-line=\"0\"><input type=\"checkbox\" disabled></li>"))
+}
+
 @Test func dataLineOnHorizontalRule() {
     let md = """
     above

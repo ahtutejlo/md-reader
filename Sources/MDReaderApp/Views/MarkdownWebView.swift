@@ -11,23 +11,27 @@ struct MarkdownWebView: NSViewRepresentable {
 
     func makeNSView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
+        config.userContentController.add(context.coordinator, name: "mdToggleTask")
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.setValue(false, forKey: "drawsBackground")
         webView.navigationDelegate = context.coordinator
         context.coordinator.webView = webView
+        context.coordinator.viewModel = viewModel
         webView.loadHTMLString(Self.shellHTML, baseURL: nil)
         return webView
     }
 
     func updateNSView(_ webView: WKWebView, context: Context) {
+        context.coordinator.viewModel = viewModel
         context.coordinator.onUpdate(
             markdown: viewModel.text,
             activeLine: viewModel.activeLine
         )
     }
 
-    final class Coordinator: NSObject, WKNavigationDelegate {
+    final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
         weak var webView: WKWebView?
+        weak var viewModel: EditorViewModel?
         var isLoaded = false
         var lastMarkdownHash: Int = 0
         var lastActiveLine: Int?
@@ -104,6 +108,15 @@ struct MarkdownWebView: NSViewRepresentable {
             lastActiveLine = line
         }
 
+        // MARK: - WKScriptMessageHandler
+
+        func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
+            guard message.name == "mdToggleTask",
+                  let body = message.body as? [String: Any],
+                  let line = body["line"] as? Int else { return }
+            viewModel?.toggleTaskAt(line: line)
+        }
+
         /// Encodes a Swift String as a valid JavaScript string literal via JSON.
         private func jsStringLiteral(_ s: String) -> String? {
             guard let data = try? JSONSerialization.data(withJSONObject: [s], options: []),
@@ -142,9 +155,26 @@ struct MarkdownWebView: NSViewRepresentable {
             target.querySelectorAll("pre code").forEach(function(el) {
                 hljs.highlightElement(el);
             });
+            target.querySelectorAll("li.task-list-item > input[type='checkbox']").forEach(function(input) {
+                input.removeAttribute("disabled");
+                input.tabIndex = -1;
+                input.addEventListener("click", onTaskCheckboxClick);
+            });
             document.documentElement.scrollTop = scrollY;
         });
     };
+    function onTaskCheckboxClick(e) {
+        const input = e.currentTarget;
+        const li = input.closest("li.task-list-item");
+        if (!li) return;
+        const lineAttr = li.getAttribute("data-md-line");
+        if (lineAttr == null) return;
+        // Optimistic visual update; the markdown re-render will confirm it.
+        li.classList.toggle("checked", input.checked);
+        if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.mdToggleTask) {
+            window.webkit.messageHandlers.mdToggleTask.postMessage({ line: parseInt(lineAttr, 10) });
+        }
+    }
     window.mdScrollToLine = function(line) {
         const blocks = document.querySelectorAll("[data-line]");
         if (!blocks.length) return;
@@ -335,6 +365,45 @@ struct MarkdownWebView: NSViewRepresentable {
     }
     li::marker { color: var(--text-subtle); }
     ul ul, ol ol, ul ol, ol ul { margin: 0.25em 0 0.4em; }
+
+    /* GFM task lists */
+    ul.contains-task-list { padding-left: 0.4em; list-style: none; }
+    ul.contains-task-list ul { padding-left: 1.45em; }
+    li.task-list-item {
+        list-style: none;
+        padding-left: 0;
+        display: flex;
+        align-items: baseline;
+        gap: 0.55em;
+    }
+    li.task-list-item > input[type="checkbox"] {
+        appearance: none;
+        -webkit-appearance: none;
+        flex: 0 0 auto;
+        width: 0.95em;
+        height: 0.95em;
+        margin: 0;
+        border: 1.5px solid var(--border-strong);
+        border-radius: 3px;
+        background: transparent;
+        cursor: pointer;
+        transition: background 120ms ease, border-color 120ms ease;
+    }
+    li.task-list-item > input[type="checkbox"]:hover {
+        border-color: var(--accent);
+    }
+    li.task-list-item.checked > input[type="checkbox"] {
+        background: var(--accent);
+        border-color: var(--accent);
+        background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path fill='none' stroke='white' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' d='M3.5 8.4l3 3 6-6.4'/></svg>");
+        background-size: 100% 100%;
+        background-repeat: no-repeat;
+    }
+    li.task-list-item.checked {
+        color: var(--text-muted);
+        text-decoration: line-through;
+        text-decoration-color: color-mix(in oklab, var(--text-muted) 55%, transparent);
+    }
 
     /* Horizontal rule — subtle divider */
     hr {

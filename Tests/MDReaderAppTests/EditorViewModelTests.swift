@@ -111,3 +111,63 @@ private func waitUntil(
     #expect(vm.showExternalChangeAlert == true)
     #expect(vm.text == "my changes")
 }
+
+@Test func toggleTaskUncheckedBecomesChecked() {
+    let vm = EditorViewModel()
+    vm.text = "- [ ] one"
+    vm.toggleTaskAt(line: 0)
+    #expect(vm.text == "- [x] one")
+    #expect(vm.hasUnsavedChanges == true)
+}
+
+@Test func toggleTaskCheckedBecomesUnchecked() {
+    let vm = EditorViewModel()
+    vm.text = "- [x] done"
+    vm.toggleTaskAt(line: 0)
+    #expect(vm.text == "- [ ] done")
+}
+
+@Test func toggleTaskCapitalXBecomesUnchecked() {
+    let vm = EditorViewModel()
+    vm.text = "- [X] done"
+    vm.toggleTaskAt(line: 0)
+    #expect(vm.text == "- [ ] done")
+}
+
+@Test func toggleTaskPreservesIndentAndBullet() {
+    let vm = EditorViewModel()
+    vm.text = "  * [ ] indented"
+    vm.toggleTaskAt(line: 0)
+    #expect(vm.text == "  * [x] indented")
+}
+
+@Test func toggleTaskOnlyAffectsTargetLine() {
+    let vm = EditorViewModel()
+    vm.text = """
+    - [ ] one
+    - [ ] two
+    - [x] three
+    """
+    vm.toggleTaskAt(line: 1)
+    #expect(vm.text == """
+    - [ ] one
+    - [x] two
+    - [x] three
+    """)
+}
+
+@Test func toggleTaskIgnoresNonTaskLine() {
+    let vm = EditorViewModel()
+    vm.text = "just a paragraph"
+    vm.toggleTaskAt(line: 0)
+    #expect(vm.text == "just a paragraph")
+    #expect(vm.hasUnsavedChanges == false)
+}
+
+@Test func toggleTaskIgnoresOutOfRangeLine() {
+    let vm = EditorViewModel()
+    vm.text = "- [ ] one"
+    vm.toggleTaskAt(line: 99)
+    #expect(vm.text == "- [ ] one")
+    #expect(vm.hasUnsavedChanges == false)
+}
