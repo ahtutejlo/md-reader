@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import MDReaderApp
 
@@ -16,12 +17,12 @@ import Testing
     ###### H6
     """
     let html = MarkdownRenderer.renderHTML(from: md)
-    #expect(html.contains("<h1 data-line=\"0\">H1</h1>"))
-    #expect(html.contains("<h2 data-line=\"2\">H2</h2>"))
-    #expect(html.contains("<h3 data-line=\"4\">H3</h3>"))
-    #expect(html.contains("<h4 data-line=\"6\">H4</h4>"))
-    #expect(html.contains("<h5 data-line=\"8\">H5</h5>"))
-    #expect(html.contains("<h6 data-line=\"10\">H6</h6>"))
+    #expect(html.contains("<h1 id=\"h1\" data-line=\"0\">H1</h1>"))
+    #expect(html.contains("<h2 id=\"h2\" data-line=\"2\">H2</h2>"))
+    #expect(html.contains("<h3 id=\"h3\" data-line=\"4\">H3</h3>"))
+    #expect(html.contains("<h4 id=\"h4\" data-line=\"6\">H4</h4>"))
+    #expect(html.contains("<h5 id=\"h5\" data-line=\"8\">H5</h5>"))
+    #expect(html.contains("<h6 id=\"h6\" data-line=\"10\">H6</h6>"))
 }
 
 @Test func dataLineOnParagraph() {
@@ -404,6 +405,69 @@ func imageRendersAsImgTag(_ md: String, _ expected: String) {
     for smart in ["–", "—", "“", "”", "‘", "’", "…"] {
         #expect(!html.contains(smart))
     }
+}
+
+@Test(arguments: [
+    ("## Частина 1", "<h2 id=\"частина-1\" data-line=\"0\">Частина 1</h2>"),
+    ("## snake_case & kebab-case", "<h2 id=\"snake_case--kebab-case\" data-line=\"0\">snake_case &amp; kebab-case</h2>"),
+    ("## !!!", "<h2 data-line=\"0\">!!!</h2>"),
+])
+func headingGetsGitHubStyleAnchor(_ md: String, _ expected: String) {
+    #expect(MarkdownRenderer.renderHTML(from: md).contains(expected))
+}
+
+@Test func repeatedHeadingsGetNumberedAnchors() {
+    let html = MarkdownRenderer.renderHTML(from: "## Setup\n\n## Setup\n\n## SETUP")
+    #expect(html.contains("<h2 id=\"setup\" data-line=\"0\">Setup</h2>"))
+    #expect(html.contains("<h2 id=\"setup-1\" data-line=\"2\">Setup</h2>"))
+    #expect(html.contains("<h2 id=\"setup-2\" data-line=\"4\">SETUP</h2>"))
+}
+
+@Test func numberedAnchorDoesNotCollideWithLiteralHeading() {
+    let html = MarkdownRenderer.renderHTML(from: "## Example\n\n## Example\n\n## Example 1")
+    #expect(html.contains("<h2 id=\"example\" data-line=\"0\">Example</h2>"))
+    #expect(html.contains("<h2 id=\"example-1\" data-line=\"2\">Example</h2>"))
+    #expect(html.contains("<h2 id=\"example-1-1\" data-line=\"4\">Example 1</h2>"))
+}
+
+@Test func headingWithoutLettersOrDigitsHasNoAnchor() {
+    let html = MarkdownRenderer.renderHTML(from: "## 🚀 ✨")
+    #expect(html.contains("<h2 data-line=\"0\">🚀 ✨</h2>"))
+}
+
+@Test(arguments: [
+    ("[x](JavaScript:alert(1))", "<a>x</a>"),
+    ("[x](vbscript:msgbox(1))", "<a>x</a>"),
+    ("[x](data:text/html;base64,PHNjcmlwdD4=)", "<a>x</a>"),
+    ("[x](java&#9;script:alert(1))", "<a>x</a>"),
+    ("[x](<\u{1}javascript:alert(1)>)", "<a>x</a>"),
+    ("<javascript:alert(1)>", "<a>javascript:alert(1)</a>"),
+])
+func scriptLinkRendersWithoutHref(_ md: String, _ expected: String) {
+    let html = MarkdownRenderer.renderHTML(from: md)
+    #expect(html.contains(expected))
+    #expect(!html.contains("href"))
+}
+
+@Test func ordinaryLinksKeepHref() {
+    let html = MarkdownRenderer.renderHTML(from: "[a](javascript-notes.md) [b](data/report.md) [c](#part-1)")
+    #expect(html.contains("<a href=\"javascript-notes.md\">a</a> <a href=\"data/report.md\">b</a> <a href=\"#part-1\">c</a>"))
+}
+
+@Test(arguments: [
+    ("![a](pic.png)", "md-asset://local/docs/notes/pic.png"),
+    ("![a](<фото 1.png>)", "md-asset://local/docs/notes/%D1%84%D0%BE%D1%82%D0%BE%201.png"),
+    ("![a](https://example.com/pic.png)", "https://example.com/pic.png"),
+    ("![a](data:image/png;base64,iVBORw0KGgo=)", "data:image/png;base64,iVBORw0KGgo="),
+])
+func imageSourceResolvesAgainstDocumentFolder(_ md: String, _ src: String) {
+    let html = MarkdownRenderer.renderHTML(from: md, baseDirectory: URL(fileURLWithPath: "/docs/notes", isDirectory: true))
+    #expect(html.contains("<img src=\"\(src)\" alt=\"a\">"))
+}
+
+@Test func absoluteImageLoadsWithoutDocumentFolder() {
+    let html = MarkdownRenderer.renderHTML(from: "![a](/shared/pic.png)")
+    #expect(html.contains("<img src=\"md-asset://local/shared/pic.png\" alt=\"a\">"))
 }
 
 private func occurrences(of needle: String, in html: String) -> Int {

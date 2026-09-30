@@ -1,8 +1,6 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-private let markdownExtensions: Set<String> = ["md", "markdown"]
-
 @main
 struct MDReaderApp: App {
     @NSApplicationDelegateAdaptor private var appDelegate: AppDelegate
@@ -22,7 +20,8 @@ struct MDReaderApp: App {
             } detail: {
                 ContentView(
                     fileURL: selectedFilePath.map { URL(fileURLWithPath: $0) },
-                    viewModel: viewModel
+                    viewModel: viewModel,
+                    onOpenMarkdown: openMarkdownFile
                 )
             }
             .onOpenURL { url in
@@ -62,7 +61,7 @@ struct MDReaderApp: App {
             .onDrop(of: [.fileURL], isTargeted: nil) { providers in
                 for provider in providers {
                     _ = provider.loadObject(ofClass: URL.self) { url, _ in
-                        if let url, markdownExtensions.contains(url.pathExtension) {
+                        if let url, LinkRouter.markdownExtensions.contains(url.pathExtension) {
                             DispatchQueue.main.async {
                                 openMarkdownFile(url)
                             }
@@ -144,7 +143,7 @@ struct MDReaderApp: App {
 
     private func openFilePanel() {
         let panel = NSOpenPanel()
-        panel.allowedContentTypes = markdownExtensions.compactMap { UTType(filenameExtension: $0) }
+        panel.allowedContentTypes = LinkRouter.markdownExtensions.compactMap { UTType(filenameExtension: $0) }
         panel.allowsMultipleSelection = false
         if panel.runModal() == .OK, let url = panel.url {
             openMarkdownFile(url)

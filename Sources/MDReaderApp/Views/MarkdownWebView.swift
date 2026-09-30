@@ -4,6 +4,7 @@ import os
 
 struct MarkdownWebView: NSViewRepresentable {
     @Bindable var viewModel: EditorViewModel
+    var onOpenMarkdown: (URL) -> Void
 
     func makeCoordinator() -> Coordinator {
         Coordinator()
@@ -13,17 +14,21 @@ struct MarkdownWebView: NSViewRepresentable {
         let config = WKWebViewConfiguration()
         config.userContentController.add(context.coordinator, name: "mdToggleTask")
         config.userContentController.add(context.coordinator, name: "mdCopyCode")
+        config.userContentController.add(context.coordinator, name: "mdOpenLink")
+        config.setURLSchemeHandler(LocalAssetSchemeHandler(), forURLScheme: LocalAssetSchemeHandler.scheme)
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.setValue(false, forKey: "drawsBackground")
         webView.navigationDelegate = context.coordinator
         context.coordinator.webView = webView
         context.coordinator.viewModel = viewModel
+        context.coordinator.onOpenMarkdown = onOpenMarkdown
         webView.loadHTMLString(Self.shellHTML, baseURL: nil)
         return webView
     }
 
     func updateNSView(_ webView: WKWebView, context: Context) {
         context.coordinator.viewModel = viewModel
+        context.coordinator.onOpenMarkdown = onOpenMarkdown
         context.coordinator.onUpdate(
             markdown: viewModel.text,
             activeLine: viewModel.activeLine
@@ -33,6 +38,7 @@ struct MarkdownWebView: NSViewRepresentable {
     final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
         weak var webView: WKWebView?
         weak var viewModel: EditorViewModel?
+        var onOpenMarkdown: ((URL) -> Void)?
         var isLoaded = false
         var lastMarkdownHash: Int = 0
         var lastActiveLine: Int?
@@ -54,13 +60,25 @@ struct MarkdownWebView: NSViewRepresentable {
             }
         }
 
+        /// Links are handled by the click listener; the shell page itself never navigates away.
+        func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping @MainActor (WKNavigationActionPolicy) -> Void) {
+            decisionHandler(isLoaded ? .cancel : .allow)
+        }
+
+        private var documentDirectory: URL? {
+            viewModel?.fileURL?.deletingLastPathComponent()
+        }
+
         func onUpdate(markdown: String, activeLine: Int) {
             guard isLoaded else {
                 pendingMarkdown = markdown
                 pendingActiveLine = activeLine
                 return
             }
-            let hash = markdown.hashValue
+            var hasher = Hasher()
+            hasher.combine(markdown)
+            hasher.combine(viewModel?.fileURL)
+            let hash = hasher.finalize()
             let markdownChanged = (hash != lastMarkdownHash)
             let lineChanged = (activeLine != lastActiveLine)
             if markdownChanged {
@@ -82,7 +100,7 @@ struct MarkdownWebView: NSViewRepresentable {
 
         private func pushUpdate(markdown: String, thenScrollTo scrollLine: Int?) {
             guard let webView else { return }
-            let html = MarkdownRenderer.renderHTML(from: markdown)
+            let html = MarkdownRenderer.renderHTML(from: markdown, baseDirectory: documentDirectory)
             guard let encoded = jsStringLiteral(html) else {
                 log.error("Failed to encode HTML for JS")
                 return
@@ -121,8 +139,24 @@ struct MarkdownWebView: NSViewRepresentable {
                 guard let text = message.body as? String else { return }
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(text, forType: .string)
+            case "mdOpenLink":
+                guard let href = message.body as? String else { return }
+                openLink(href)
             default:
                 break
+            }
+        }
+
+        private func openLink(_ href: String) {
+            switch LinkRouter.target(for: href, relativeTo: documentDirectory) {
+            case .external(let url):
+                NSWorkspace.shared.open(url)
+            case .markdown(let url) where FileManager.default.fileExists(atPath: url.path):
+                onOpenMarkdown?(url)
+            case .localFile(let url) where FileManager.default.fileExists(atPath: url.path):
+                NSWorkspace.shared.activateFileViewerSelecting([url])
+            default:
+                NSSound.beep()
             }
         }
 
@@ -209,6 +243,21 @@ struct MarkdownWebView: NSViewRepresentable {
             window.webkit.messageHandlers.mdToggleTask.postMessage({ line: parseInt(lineAttr, 10) });
         }
     }
+    document.addEventListener("click", function(e) {
+        const link = e.target.closest("a[href]");
+        if (!link) return;
+        e.preventDefault();
+        const href = link.getAttribute("href");
+        if (href.startsWith("#")) {
+            let id = href.slice(1);
+            try { id = decodeURIComponent(id); } catch (_) {}
+            document.getElementById(id)?.scrollIntoView({ block: "start" });
+            return;
+        }
+        if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.mdOpenLink) {
+            window.webkit.messageHandlers.mdOpenLink.postMessage(href);
+        }
+    });
     window.mdScrollToLine = function(line) {
         const blocks = document.querySelectorAll("[data-line]");
         if (!blocks.length) return;
@@ -323,13 +372,13 @@ struct MarkdownWebView: NSViewRepresentable {
     em { font-style: italic; }
 
     /* Links */
-    a {
+    a[href] {
         color: var(--accent);
         text-decoration: none;
         border-bottom: 1px solid color-mix(in oklab, var(--accent) 35%, transparent);
         transition: border-color 160ms ease, color 160ms ease;
     }
-    a:hover { border-bottom-color: var(--accent); }
+    a[href]:hover { border-bottom-color: var(--accent); }
     a:focus-visible {
         outline: 2px solid var(--accent);
         outline-offset: 3px;

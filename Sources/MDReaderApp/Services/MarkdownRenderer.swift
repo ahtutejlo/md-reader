@@ -4,10 +4,11 @@ import Markdown
 enum MarkdownRenderer {
 
     /// Converts markdown source to HTML. Block elements carry a 0-based `data-line`
-    /// source line so the preview can scroll in sync with the editor.
-    static func renderHTML(from source: String) -> String {
+    /// source line so the preview can scroll in sync with the editor. Relative image
+    /// paths resolve against `baseDirectory`, the folder of the file being shown.
+    static func renderHTML(from source: String, baseDirectory: URL? = nil) -> String {
         let document = Document(parsing: source, options: [.disableSmartOpts])
-        var walker = HTMLWalker(sourceLines: source.components(separatedBy: "\n"))
+        var walker = HTMLWalker(sourceLines: source.components(separatedBy: "\n"), baseDirectory: baseDirectory)
         walker.visit(document)
         return walker.result
     }
@@ -15,13 +16,17 @@ enum MarkdownRenderer {
 
 private struct HTMLWalker: MarkupWalker {
     let sourceLines: [String]
+    let baseDirectory: URL?
     var result = ""
     var tightLists: [Bool] = []
     var columnAlignments: [Table.ColumnAlignment?] = []
     var inLink = false
+    var usedSlugs: Set<String> = []
 
     mutating func visitHeading(_ heading: Heading) {
-        wrap(heading, "<h\(heading.level)\(lineAttr(heading))>", "</h\(heading.level)>\n")
+        let id = uniqueSlug(for: heading.plainText)
+        let idAttr = id.isEmpty ? "" : " id=\"\(escapeHTML(id))\""
+        wrap(heading, "<h\(heading.level)\(idAttr)\(lineAttr(heading))>", "</h\(heading.level)>\n")
     }
 
     mutating func visitParagraph(_ paragraph: Paragraph) {
@@ -129,13 +134,18 @@ private struct HTMLWalker: MarkupWalker {
     }
 
     mutating func visitLink(_ link: Link) {
+        let destination = link.destination ?? ""
+        let open = isScriptURL(destination) ? "<a>" : "<a href=\"\(escapeHTML(destination))\">"
         inLink = true
-        wrap(link, "<a href=\"\(escapeHTML(link.destination ?? ""))\">", "</a>")
+        wrap(link, open, "</a>")
         inLink = false
     }
 
     mutating func visitImage(_ image: Image) {
-        result += "<img src=\"\(escapeHTML(image.source ?? ""))\" alt=\"\(escapeHTML(image.plainText))\">"
+        let source = image.source ?? ""
+        let resolved = LinkRouter.fileURL(for: source, relativeTo: baseDirectory)
+            .flatMap(LocalAssetSchemeHandler.url(for:))?.absoluteString ?? source
+        result += "<img src=\"\(escapeHTML(resolved))\" alt=\"\(escapeHTML(image.plainText))\">"
     }
 
     mutating func visitInlineHTML(_ html: InlineHTML) {
@@ -175,6 +185,34 @@ private struct HTMLWalker: MarkupWalker {
         case "[x]", "[X]": return .checked
         default: return nil
         }
+    }
+
+    /// GitHub-style heading anchor: lowercase, spaces become hyphens, punctuation is
+    /// dropped, letters of any script are kept; repeats get `-1`, `-2`, ...
+    private mutating func uniqueSlug(for text: String) -> String {
+        var slug = ""
+        for scalar in text.lowercased().unicodeScalars {
+            if scalar == " " {
+                slug += "-"
+            } else if CharacterSet.alphanumerics.contains(scalar) || scalar == "-" || scalar == "_" {
+                slug.unicodeScalars.append(scalar)
+            }
+        }
+        guard slug.unicodeScalars.contains(where: CharacterSet.alphanumerics.contains) else { return "" }
+        var unique = slug
+        var suffix = 0
+        while !usedSlugs.insert(unique).inserted {
+            suffix += 1
+            unique = "\(slug)-\(suffix)"
+        }
+        return unique
+    }
+
+    private static let ignoredInScheme = CharacterSet.whitespacesAndNewlines.union(.controlCharacters)
+
+    private func isScriptURL(_ destination: String) -> Bool {
+        let compact = destination.components(separatedBy: Self.ignoredInScheme).joined().lowercased()
+        return ["javascript:", "vbscript:", "data:"].contains { compact.hasPrefix($0) }
     }
 
     private func lineAttr(_ markup: Markup, name: String = "data-line") -> String {
