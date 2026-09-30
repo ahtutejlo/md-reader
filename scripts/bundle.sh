@@ -14,8 +14,9 @@ swift build -c "${CONFIG}"
 rm -rf "${BUNDLE_DIR}"
 mkdir -p "${MACOS_DIR}" "${CONTENTS_DIR}/Resources"
 
-# Copy executable
+# Copy executable and its SwiftPM resource bundle (Bundle.module looks in Contents/Resources)
 cp ".build/${CONFIG}/MDReaderApp" "${MACOS_DIR}/${APP_NAME}"
+cp -R ".build/${CONFIG}/MDReader_MDReaderApp.bundle" "${CONTENTS_DIR}/Resources/"
 
 # Copy Info.plist and add required bundle keys
 cat > "${CONTENTS_DIR}/Info.plist" << 'PLIST'

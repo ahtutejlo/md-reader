@@ -20,14 +20,16 @@ Create the MDReader.app bundle structure in `.build/MDReader.app`:
     ├── MacOS/
     │   └── MDReader
     └── Resources/
-        └── AppIcon.icns
+        ├── AppIcon.icns
+        └── MDReader_MDReaderApp.bundle/
 ```
 
 1. Remove any existing `.build/MDReader.app` directory
 2. Create directories: `Contents/MacOS` and `Contents/Resources`
 3. Copy the release binary: `.build/release/MDReaderApp` → `Contents/MacOS/MDReader`
 4. Copy the icon: `Sources/MDReaderApp/Resources/AppIcon.icns` → `Contents/Resources/`
-5. Write `Contents/Info.plist` using the template from `scripts/bundle.sh`
+5. Copy the SwiftPM resource bundle: `.build/release/MDReader_MDReaderApp.bundle` → `Contents/Resources/` (without it the app crashes on launch in `Bundle.module`)
+6. Write `Contents/Info.plist` using the template from `scripts/bundle.sh`
 
 ## Step 3: Install app to /Applications
 
