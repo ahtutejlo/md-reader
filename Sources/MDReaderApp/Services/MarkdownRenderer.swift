@@ -1,283 +1,253 @@
 import Foundation
+import Markdown
 
 enum MarkdownRenderer {
 
-    /// Converts markdown source to HTML using line-by-line parsing.
-    /// Input is local file content — no untrusted user input.
+    /// Converts markdown source to HTML. Block elements carry a 0-based `data-line`
+    /// source line so the preview can scroll in sync with the editor.
     static func renderHTML(from source: String) -> String {
-        let lines = source.components(separatedBy: "\n")
-        var html: [String] = []
-        var i = 0
+        let document = Document(parsing: source, options: [.disableSmartOpts])
+        var walker = HTMLWalker(sourceLines: source.components(separatedBy: "\n"))
+        walker.visit(document)
+        return walker.result
+    }
+}
 
-        while i < lines.count {
-            let line = lines[i]
+private struct HTMLWalker: MarkupWalker {
+    let sourceLines: [String]
+    var result = ""
+    var tightLists: [Bool] = []
+    var columnAlignments: [Table.ColumnAlignment?] = []
+    var inLink = false
 
-            // Fenced code block
-            let trimmedLine = line.trimmingCharacters(in: .whitespaces)
-            if trimmedLine.hasPrefix("```") {
-                let blockStart = i
-                let lang = String(trimmedLine.dropFirst(3)).trimmingCharacters(in: .whitespaces)
-                var codeLines: [String] = []
-                i += 1
-                while i < lines.count && !lines[i].trimmingCharacters(in: .whitespaces).hasPrefix("```") {
-                    codeLines.append(escapeHTML(lines[i]))
-                    i += 1
-                }
-                let langAttr = lang.isEmpty ? "" : " class=\"language-\(escapeHTML(lang))\""
-                html.append("<pre data-line=\"\(blockStart)\"><code\(langAttr)>\(codeLines.joined(separator: "\n"))</code></pre>")
-                i += 1
-                continue
-            }
-
-            // Headings (CommonMark requires a space after the hashes)
-            if line.hasPrefix("###### ") {
-                html.append("<h6 data-line=\"\(i)\">\(inlineMarkdown(String(line.dropFirst(7))))</h6>")
-                i += 1; continue
-            }
-            if line.hasPrefix("##### ") {
-                html.append("<h5 data-line=\"\(i)\">\(inlineMarkdown(String(line.dropFirst(6))))</h5>")
-                i += 1; continue
-            }
-            if line.hasPrefix("#### ") {
-                html.append("<h4 data-line=\"\(i)\">\(inlineMarkdown(String(line.dropFirst(5))))</h4>")
-                i += 1; continue
-            }
-            if line.hasPrefix("### ") {
-                html.append("<h3 data-line=\"\(i)\">\(inlineMarkdown(String(line.dropFirst(4))))</h3>")
-                i += 1; continue
-            }
-            if line.hasPrefix("## ") {
-                html.append("<h2 data-line=\"\(i)\">\(inlineMarkdown(String(line.dropFirst(3))))</h2>")
-                i += 1; continue
-            }
-            if line.hasPrefix("# ") {
-                html.append("<h1 data-line=\"\(i)\">\(inlineMarkdown(String(line.dropFirst(2))))</h1>")
-                i += 1; continue
-            }
-
-            // Horizontal rule
-            if line.trimmingCharacters(in: .whitespaces) == "---" ||
-               line.trimmingCharacters(in: .whitespaces) == "***" ||
-               line.trimmingCharacters(in: .whitespaces) == "___" {
-                html.append("<hr data-line=\"\(i)\">")
-                i += 1; continue
-            }
-
-            // Blockquote
-            if line.hasPrefix(">") {
-                let blockStart = i
-                var quoteLines: [String] = []
-                while i < lines.count && lines[i].hasPrefix(">") {
-                    let content = String(lines[i].dropFirst(1)).trimmingCharacters(in: .init(charactersIn: " "))
-                    quoteLines.append(inlineMarkdown(content))
-                    i += 1
-                }
-                html.append("<blockquote data-line=\"\(blockStart)\"><p>\(quoteLines.joined(separator: "<br>"))</p></blockquote>")
-                continue
-            }
-
-            // Unordered list (with GFM task list support)
-            if line.hasPrefix("- ") || line.hasPrefix("* ") {
-                let blockStart = i
-                var hasTasks = false
-                var items: [String] = []
-                while i < lines.count && (lines[i].hasPrefix("- ") || lines[i].hasPrefix("* ")) {
-                    let content = String(lines[i].dropFirst(2))
-                    if let task = parseTaskListItem(content) {
-                        hasTasks = true
-                        let checkedAttr = task.checked ? " checked" : ""
-                        let itemClass = task.checked ? "task-list-item checked" : "task-list-item"
-                        items.append("<li class=\"\(itemClass)\" data-md-line=\"\(i)\"><input type=\"checkbox\" disabled\(checkedAttr)>\(inlineMarkdown(task.text))</li>")
-                    } else {
-                        items.append("<li>\(inlineMarkdown(content))</li>")
-                    }
-                    i += 1
-                }
-                let ulClass = hasTasks ? " class=\"contains-task-list\"" : ""
-                html.append("<ul\(ulClass) data-line=\"\(blockStart)\">")
-                html.append(contentsOf: items)
-                html.append("</ul>")
-                continue
-            }
-
-            // Ordered list
-            if let _ = line.range(of: #"^\d+\. "#, options: .regularExpression) {
-                let blockStart = i
-                html.append("<ol data-line=\"\(blockStart)\">")
-                while i < lines.count, let range = lines[i].range(of: #"^\d+\. "#, options: .regularExpression) {
-                    let content = String(lines[i][range.upperBound...])
-                    html.append("<li>\(inlineMarkdown(content))</li>")
-                    i += 1
-                }
-                html.append("</ol>")
-                continue
-            }
-
-            // Table
-            if isTableStart(lines: lines, at: i) {
-                let blockStart = i
-                let headers = parseTableRow(line)
-                let colCount = headers.count
-                let alignments = parseAlignments(lines[i + 1], count: colCount)
-                i += 2
-                html.append("<table data-line=\"\(blockStart)\"><thead><tr>")
-                for (j, h) in headers.enumerated() {
-                    let style = alignments[j].isEmpty ? "" : " style=\"text-align:\(alignments[j])\""
-                    html.append("<th\(style)>\(inlineMarkdown(h))</th>")
-                }
-                html.append("</tr></thead><tbody>")
-                while i < lines.count && lines[i].contains("|") {
-                    let raw = parseTableRow(lines[i])
-                    let cells = normalizeCells(raw, count: colCount)
-                    html.append("<tr>")
-                    for (j, c) in cells.enumerated() {
-                        let style = alignments[j].isEmpty ? "" : " style=\"text-align:\(alignments[j])\""
-                        html.append("<td\(style)>\(inlineMarkdown(c))</td>")
-                    }
-                    html.append("</tr>")
-                    i += 1
-                }
-                html.append("</tbody></table>")
-                continue
-            }
-
-            // Empty line
-            if line.trimmingCharacters(in: .whitespaces).isEmpty {
-                i += 1; continue
-            }
-
-            // Paragraph
-            let paraStart = i
-            var paraLines: [String] = []
-            while i < lines.count &&
-                  !lines[i].trimmingCharacters(in: .whitespaces).isEmpty &&
-                  lines[i].range(of: #"^#{1,6} "#, options: .regularExpression) == nil &&
-                  !lines[i].hasPrefix("```") &&
-                  !lines[i].hasPrefix(">") &&
-                  !lines[i].hasPrefix("- ") &&
-                  !lines[i].hasPrefix("* ") &&
-                  lines[i].range(of: #"^\d+\. "#, options: .regularExpression) == nil &&
-                  lines[i].trimmingCharacters(in: .whitespaces) != "---" &&
-                  !isTableStart(lines: lines, at: i) {
-                paraLines.append(inlineMarkdown(lines[i]))
-                i += 1
-            }
-            if !paraLines.isEmpty {
-                html.append("<p data-line=\"\(paraStart)\">\(paraLines.joined(separator: "\n"))</p>")
-            }
-        }
-
-        return html.joined(separator: "\n")
+    mutating func visitHeading(_ heading: Heading) {
+        wrap(heading, "<h\(heading.level)\(lineAttr(heading))>", "</h\(heading.level)>\n")
     }
 
-    /// Parses a list-item body for a GFM task marker: `[ ] text`, `[x] text`, `[X] text`.
-    /// Returns nil if the body is not a task list item. Accepts `- [x]` with no trailing text.
-    private static func parseTaskListItem(_ content: String) -> (checked: Bool, text: String)? {
-        let chars = Array(content)
-        guard chars.count >= 3, chars[0] == "[", chars[2] == "]" else { return nil }
-        if chars.count > 3 && !chars[3].isWhitespace { return nil }
-        let checked: Bool
-        switch chars[1] {
-        case " ": checked = false
-        case "x", "X": checked = true
+    mutating func visitParagraph(_ paragraph: Paragraph) {
+        if paragraph.parent is ListItem, tightLists.last == true {
+            descendInto(paragraph)
+            if paragraph.indexInParent < (paragraph.parent?.childCount ?? 0) - 1 {
+                result += "\n"
+            }
+            return
+        }
+        wrap(paragraph, "<p\(lineAttr(paragraph))>", "</p>\n")
+    }
+
+    mutating func visitBlockQuote(_ blockQuote: BlockQuote) {
+        wrap(blockQuote, "<blockquote\(lineAttr(blockQuote))>\n", "</blockquote>\n")
+    }
+
+    mutating func visitCodeBlock(_ codeBlock: CodeBlock) {
+        let language = codeBlock.language?.split(separator: " ").first.map(String.init) ?? ""
+        let langAttr = language.isEmpty ? "" : " class=\"language-\(escapeHTML(language))\""
+        var code = codeBlock.code
+        if code.hasSuffix("\n") { code.removeLast() }
+        result += "<pre\(lineAttr(codeBlock))><code\(langAttr)>\(escapeHTML(code))</code></pre>\n"
+    }
+
+    mutating func visitThematicBreak(_ thematicBreak: ThematicBreak) {
+        result += "<hr\(lineAttr(thematicBreak))>\n"
+    }
+
+    mutating func visitHTMLBlock(_ html: HTMLBlock) {
+        var raw = html.rawHTML
+        if raw.hasSuffix("\n") { raw.removeLast() }
+        result += "<p\(lineAttr(html))>\(escapeHTML(raw))</p>\n"
+    }
+
+    mutating func visitUnorderedList(_ list: UnorderedList) {
+        let hasTasks = list.listItems.contains { taskCheckbox($0) != nil }
+        renderList(list, tag: "ul", attrs: hasTasks ? " class=\"contains-task-list\"" : "")
+    }
+
+    mutating func visitOrderedList(_ list: OrderedList) {
+        renderList(list, tag: "ol", attrs: list.startIndex == 1 ? "" : " start=\"\(list.startIndex)\"")
+    }
+
+    mutating func visitListItem(_ item: ListItem) {
+        guard let checkbox = taskCheckbox(item) else {
+            wrap(item, "<li>", "</li>\n")
+            return
+        }
+        let checked = checkbox == .checked
+        result += "<li class=\"task-list-item\(checked ? " checked" : "")\"\(lineAttr(item, name: "data-md-line"))>"
+        result += "<input type=\"checkbox\" disabled\(checked ? " checked" : "")>"
+        if item.checkbox != nil {
+            descendInto(item)
+        }
+        result += "</li>\n"
+    }
+
+    mutating func visitTable(_ table: Table) {
+        columnAlignments = table.columnAlignments
+        wrap(table, "<table\(lineAttr(table))>", "</table>\n")
+    }
+
+    mutating func visitTableHead(_ head: Table.Head) {
+        wrap(head, "<thead><tr>\n", "</tr></thead>")
+    }
+
+    mutating func visitTableBody(_ body: Table.Body) {
+        wrap(body, "<tbody>\n", "</tbody>")
+    }
+
+    mutating func visitTableRow(_ row: Table.Row) {
+        wrap(row, "<tr>\n", "</tr>\n")
+    }
+
+    mutating func visitTableCell(_ cell: Table.Cell) {
+        let tag = cell.parent is Table.Head ? "th" : "td"
+        let column = cell.indexInParent
+        let alignment = columnAlignments.indices.contains(column) ? columnAlignments[column] : nil
+        let style = alignment.map { " style=\"text-align:\(cssAlignment($0))\"" } ?? ""
+        wrap(cell, "<\(tag)\(style)>", "</\(tag)>\n")
+    }
+
+    mutating func visitText(_ text: Text) {
+        result += inLink ? escapeHTML(text.string) : autolinked(text.string)
+    }
+
+    mutating func visitInlineCode(_ code: InlineCode) {
+        result += "<code>\(escapeHTML(code.code))</code>"
+    }
+
+    mutating func visitEmphasis(_ emphasis: Emphasis) {
+        wrap(emphasis, "<em>", "</em>")
+    }
+
+    mutating func visitStrong(_ strong: Strong) {
+        wrap(strong, "<strong>", "</strong>")
+    }
+
+    /// cmark-gfm also strikes through `~single~` tildes, which turns "~25M … ~7M"
+    /// into struck text; only `~~double~~` counts here.
+    mutating func visitStrikethrough(_ strikethrough: Strikethrough) {
+        let (open, close) = opensWithDoubleTilde(strikethrough) ? ("<del>", "</del>") : ("~", "~")
+        wrap(strikethrough, open, close)
+    }
+
+    mutating func visitLink(_ link: Link) {
+        inLink = true
+        wrap(link, "<a href=\"\(escapeHTML(link.destination ?? ""))\">", "</a>")
+        inLink = false
+    }
+
+    mutating func visitImage(_ image: Image) {
+        result += "<img src=\"\(escapeHTML(image.source ?? ""))\" alt=\"\(escapeHTML(image.plainText))\">"
+    }
+
+    mutating func visitInlineHTML(_ html: InlineHTML) {
+        result += escapeHTML(html.rawHTML)
+    }
+
+    mutating func visitSoftBreak(_ softBreak: SoftBreak) {
+        result += "\n"
+    }
+
+    mutating func visitLineBreak(_ lineBreak: LineBreak) {
+        result += "<br>\n"
+    }
+
+    private mutating func wrap(_ markup: Markup, _ open: String, _ close: String) {
+        result += open
+        descendInto(markup)
+        result += close
+    }
+
+    private mutating func renderList(_ list: Markup, tag: String, attrs: String) {
+        tightLists.append(isTight(list))
+        wrap(list, "<\(tag)\(attrs)\(lineAttr(list))>\n", "</\(tag)>\n")
+        tightLists.removeLast()
+    }
+
+    /// cmark-gfm needs text after the marker; a bare `- [ ]` still renders as an
+    /// empty task so a freshly typed item shows its checkbox.
+    private func taskCheckbox(_ item: ListItem) -> Checkbox? {
+        if let checkbox = item.checkbox { return checkbox }
+        guard item.childCount == 1,
+              let start = (item.child(at: 0) as? Paragraph)?.range?.lowerBound,
+              sourceLines.indices.contains(start.line - 1) else { return nil }
+        let rest = String(decoding: sourceLines[start.line - 1].utf8.dropFirst(start.column - 1), as: UTF8.self)
+        switch rest.trimmingCharacters(in: .whitespaces) {
+        case "[ ]": return .unchecked
+        case "[x]", "[X]": return .checked
         default: return nil
         }
-        let text = chars.count > 4 ? String(content.dropFirst(4)) : ""
-        return (checked, text)
     }
 
-    private static func isTableStart(lines: [String], at i: Int) -> Bool {
-        guard i + 1 < lines.count, lines[i].contains("|") else { return false }
-        return lines[i + 1].range(
-            of: #"^\|?(\s*:?-{3,}:?\s*\|)+\s*:?-{3,}:?\s*\|?\s*$"#,
-            options: .regularExpression
-        ) != nil
+    private func lineAttr(_ markup: Markup, name: String = "data-line") -> String {
+        guard let line = markup.range?.lowerBound.line else { return "" }
+        return " \(name)=\"\(line - 1)\""
     }
 
-    private static func parseTableRow(_ row: String) -> [String] {
-        var trimmed = row.trimmingCharacters(in: .whitespaces)
-        if trimmed.hasPrefix("|") { trimmed = String(trimmed.dropFirst()) }
-        if trimmed.hasSuffix("|") { trimmed = String(trimmed.dropLast()) }
-        // Split by unescaped pipes
-        var cells: [String] = []
-        var current = ""
-        var escaped = false
-        for ch in trimmed {
-            if escaped {
-                if ch == "|" { current.append(ch) } else { current.append("\\"); current.append(ch) }
-                escaped = false
-            } else if ch == "\\" {
-                escaped = true
-            } else if ch == "|" {
-                cells.append(current.trimmingCharacters(in: .whitespaces))
-                current = ""
-            } else {
-                current.append(ch)
+    /// swift-markdown does not expose list tightness, so it is derived from the
+    /// source: a blank line between items, or between blocks of one item, makes
+    /// the list loose.
+    private func isTight(_ list: Markup) -> Bool {
+        !list.children.dropFirst().contains(where: hasBlankLineBefore)
+            && !list.children.contains { $0.children.dropFirst().contains(where: hasBlankLineBefore) }
+    }
+
+    private func hasBlankLineBefore(_ markup: Markup) -> Bool {
+        guard let line = markup.range?.lowerBound.line else { return false }
+        let index = line - 2
+        return sourceLines.indices.contains(index)
+            && sourceLines[index].trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    /// Compares the marker's start with its content's start rather than reading
+    /// source bytes: on lazy continuation lines cmark reports columns relative to
+    /// the enclosing list item or quote.
+    private func opensWithDoubleTilde(_ strikethrough: Strikethrough) -> Bool {
+        guard let start = strikethrough.range?.lowerBound,
+              let contentStart = strikethrough.child(at: 0)?.range?.lowerBound,
+              contentStart.line == start.line else { return false }
+        return contentStart.column - start.column == 2
+    }
+
+    private func cssAlignment(_ alignment: Table.ColumnAlignment) -> String {
+        switch alignment {
+        case .left: "left"
+        case .center: "center"
+        case .right: "right"
+        }
+    }
+
+    private static let urlPattern = try! NSRegularExpression(pattern: #"https?://[^\s<>"'`]+"#)
+
+    private func autolinked(_ raw: String) -> String {
+        let ns = raw as NSString
+        var output = ""
+        var cursor = 0
+        for match in Self.urlPattern.matches(in: raw, range: NSRange(location: 0, length: ns.length)) {
+            var url = ns.substring(with: match.range)
+            while let last = url.last, ".,;:!?)]".contains(last) {
+                if last == ")", url.filter({ $0 == "(" }).count >= url.filter({ $0 == ")" }).count { break }
+                url.removeLast()
+            }
+            output += escapeHTML(ns.substring(with: NSRange(location: cursor, length: match.range.location - cursor)))
+            output += "<a href=\"\(escapeHTML(url))\">\(escapeHTML(url))</a>"
+            cursor = match.range.location + (url as NSString).length
+        }
+        output += escapeHTML(ns.substring(from: cursor))
+        return output
+    }
+
+    private func escapeHTML(_ text: String) -> String {
+        guard text.utf8.contains(where: { "&<>\"".utf8.contains($0) }) else { return text }
+        var escaped = ""
+        escaped.reserveCapacity(text.utf8.count + 16)
+        for scalar in text.unicodeScalars {
+            switch scalar {
+            case "&": escaped += "&amp;"
+            case "<": escaped += "&lt;"
+            case ">": escaped += "&gt;"
+            case "\"": escaped += "&quot;"
+            default: escaped.unicodeScalars.append(scalar)
             }
         }
-        if escaped { current.append("\\") }
-        cells.append(current.trimmingCharacters(in: .whitespaces))
-        return cells
-    }
-
-    private static func normalizeCells(_ cells: [String], count: Int) -> [String] {
-        if cells.count >= count { return Array(cells.prefix(count)) }
-        return cells + Array(repeating: "", count: count - cells.count)
-    }
-
-    private static func parseAlignments(_ separator: String, count: Int) -> [String] {
-        let parts = separator.trimmingCharacters(in: .whitespaces)
-            .trimmingCharacters(in: .init(charactersIn: "|"))
-            .components(separatedBy: "|")
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-        var alignments: [String] = []
-        for part in parts {
-            let left = part.hasPrefix(":")
-            let right = part.hasSuffix(":")
-            if left && right { alignments.append("center") }
-            else if right { alignments.append("right") }
-            else if left { alignments.append("left") }
-            else { alignments.append("") }
-        }
-        return normalizeCells(alignments, count: count)
-    }
-
-    private static func escapeHTML(_ text: String) -> String {
-        text.replacingOccurrences(of: "&", with: "&amp;")
-            .replacingOccurrences(of: "<", with: "&lt;")
-            .replacingOccurrences(of: ">", with: "&gt;")
-            .replacingOccurrences(of: "\"", with: "&quot;")
-    }
-
-    /// Handles inline markdown: bold, italic, code, links
-    private static func inlineMarkdown(_ text: String) -> String {
-        var result = escapeHTML(text)
-
-        // Inline code (before other transforms to avoid conflicts)
-        result = result.replacingOccurrences(
-            of: #"`([^`]+)`"#, with: "<code>$1</code>",
-            options: .regularExpression)
-
-        // Bold + italic
-        result = result.replacingOccurrences(
-            of: #"\*\*\*(.+?)\*\*\*"#, with: "<strong><em>$1</em></strong>",
-            options: .regularExpression)
-
-        // Bold
-        result = result.replacingOccurrences(
-            of: #"\*\*(.+?)\*\*"#, with: "<strong>$1</strong>",
-            options: .regularExpression)
-
-        // Italic
-        result = result.replacingOccurrences(
-            of: #"\*(.+?)\*"#, with: "<em>$1</em>",
-            options: .regularExpression)
-
-        // Links [text](url)
-        result = result.replacingOccurrences(
-            of: #"\[([^\]]+)\]\(([^)]+)\)"#, with: #"<a href="$2">$1</a>"#,
-            options: .regularExpression)
-
-        return result
+        return escaped
     }
 }

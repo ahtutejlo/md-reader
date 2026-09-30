@@ -99,8 +99,7 @@ class EditorViewModel {
         var lines = text.components(separatedBy: "\n")
         guard lines.indices.contains(line) else { return }
         let source = lines[line]
-        guard let regex = try? NSRegularExpression(pattern: #"^[ \t]*[-*]\s+\[([ xX])\]"#),
-              let match = regex.firstMatch(in: source, range: NSRange(source.startIndex..., in: source)),
+        guard let match = Self.taskMarkerPattern.firstMatch(in: source, range: NSRange(source.startIndex..., in: source)),
               let markerRange = Range(match.range(at: 1), in: source)
         else { return }
         let newMarker: Character = (source[markerRange] == " ") ? "x" : " "
@@ -110,6 +109,8 @@ class EditorViewModel {
         text = lines.joined(separator: "\n")
         textDidChange()
     }
+
+    private static let taskMarkerPattern = try! NSRegularExpression(pattern: #"^[ \t]*(?:[-*+]|\d+[.)])\s+\[([ xX])\]"#)
 
     // MARK: - Auto-save
 

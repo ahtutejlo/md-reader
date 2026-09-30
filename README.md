@@ -4,14 +4,14 @@ A native macOS markdown reader application built with SwiftUI. MDReader provides
 
 ## Features
 
-- **Markdown rendering** with full syntax support — headings, lists, tables, code blocks, blockquotes, inline formatting, and more
+- **Markdown rendering** with GitHub-flavored syntax — headings, nested lists, task lists, tables, code blocks, blockquotes, strikethrough, images, links
 - **Code syntax highlighting** powered by highlight.js
 - **Dark and light mode** — follows system appearance automatically
 - **File sidebar** with search, recent files sorted by last opened, and visual indicators for missing files
 - **Multiple ways to open files** — file picker, drag-and-drop, CLI tool, or `mdreader://` URL scheme
 - **CLI companion tool** — open markdown files from the terminal with `mdreader <file>`
 - **Persistent file cache** — recently opened files are remembered across app launches
-- **Zero external dependencies** — built entirely with native Apple frameworks
+- **Minimal dependencies** — native Apple frameworks plus Apple's [swift-markdown](https://github.com/swiftlang/swift-markdown) parser
 
 ## Requirements
 
@@ -97,7 +97,7 @@ md-reader/
 ## Architecture
 
 - **UI**: SwiftUI `NavigationSplitView` with sidebar and detail panes
-- **Markdown rendering**: Custom markdown-to-HTML conversion displayed in a `WKWebView`
+- **Markdown rendering**: `swift-markdown` parses the source; `MarkdownRenderer` turns it into HTML displayed in a `WKWebView`
 - **State management**: Swift Observation framework (`@Observable`)
 - **File cache**: JSON persistence in `~/Library/Application Support/MDReader/cache.json`
 - **CLI integration**: URL scheme (`mdreader://`) bridges the CLI tool to the GUI app
