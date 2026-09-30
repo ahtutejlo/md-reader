@@ -3,22 +3,26 @@ set -euo pipefail
 
 APP_NAME="MDReader"
 CONFIG="${CONFIG:-debug}"
+MIN_MACOS="14.0"
 BUNDLE_DIR=".build/${APP_NAME}.app"
 CONTENTS_DIR="${BUNDLE_DIR}/Contents"
 MACOS_DIR="${CONTENTS_DIR}/MacOS"
 
-# Build
-swift build -c "${CONFIG}"
+# swiftbuild stamps the deployment target as the SDK version, which gives the app
+# macOS's legacy pre-26 look; hand the linker the real SDK version instead.
+swift build -c "${CONFIG}" -Xlinker -platform_version -Xlinker macos \
+    -Xlinker "${MIN_MACOS}" -Xlinker "$(xcrun --sdk macosx --show-sdk-version)"
 
 # Create .app bundle structure
 rm -rf "${BUNDLE_DIR}"
 mkdir -p "${MACOS_DIR}" "${CONTENTS_DIR}/Resources"
 
-# Copy executable
+# Copy executable and its SwiftPM resource bundle (Bundle.module looks in Contents/Resources)
 cp ".build/${CONFIG}/MDReaderApp" "${MACOS_DIR}/${APP_NAME}"
+cp -R ".build/${CONFIG}/MDReader_MDReaderApp.bundle" "${CONTENTS_DIR}/Resources/"
 
 # Copy Info.plist and add required bundle keys
-cat > "${CONTENTS_DIR}/Info.plist" << 'PLIST'
+cat > "${CONTENTS_DIR}/Info.plist" << PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -94,7 +98,7 @@ cat > "${CONTENTS_DIR}/Info.plist" << 'PLIST'
     <key>NSHighResolutionCapable</key>
     <true/>
     <key>LSMinimumSystemVersion</key>
-    <string>14.0</string>
+    <string>${MIN_MACOS}</string>
 </dict>
 </plist>
 PLIST

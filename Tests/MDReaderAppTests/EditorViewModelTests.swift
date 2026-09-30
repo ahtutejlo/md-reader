@@ -171,3 +171,37 @@ private func waitUntil(
     #expect(vm.text == "- [ ] one")
     #expect(vm.hasUnsavedChanges == false)
 }
+
+@Test(arguments: [
+    ("+ [ ] plus", "+ [x] plus"),
+    ("1. [ ] first", "1. [x] first"),
+    ("1) [x] paren", "1) [ ] paren"),
+    ("   10. [X] nested", "   10. [ ] nested"),
+])
+func toggleTaskAcceptsEveryListMarker(_ source: String, _ toggled: String) {
+    let vm = EditorViewModel()
+    vm.text = source
+    vm.toggleTaskAt(line: 0)
+    #expect(vm.text == toggled)
+    #expect(vm.hasUnsavedChanges == true)
+}
+
+@Test(arguments: ["1.5 [ ] version", "[ ] no marker", "-[ ] no space", "1.[ ] no space", "a. [ ] letter"])
+func toggleTaskIgnoresBracketsWithoutListMarker(_ source: String) {
+    let vm = EditorViewModel()
+    vm.text = source
+    vm.toggleTaskAt(line: 0)
+    #expect(vm.text == source)
+    #expect(vm.hasUnsavedChanges == false)
+}
+
+@Test func toggleNestedOrderedTaskAtRenderedLine() throws {
+    let md = "1. parent\n   1) [ ] child\n2. sibling"
+    let html = MarkdownRenderer.renderHTML(from: md)
+    let line = try #require(html.firstMatch(of: #/data-md-line="(\d+)"/#).flatMap { Int($0.1) })
+
+    let vm = EditorViewModel()
+    vm.text = md
+    vm.toggleTaskAt(line: line)
+    #expect(vm.text == "1. parent\n   1) [x] child\n2. sibling")
+}

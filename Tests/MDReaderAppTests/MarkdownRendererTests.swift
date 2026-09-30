@@ -176,3 +176,236 @@ import Testing
     #expect(html.contains("<hr data-line=\"6\">"))
     #expect(html.contains("<hr data-line=\"10\">"))
 }
+
+@Test func nestedBulletListInsideParentItem() {
+    let md = """
+    - a
+      - b
+      - c
+    - d
+    """
+    let html = MarkdownRenderer.renderHTML(from: md)
+    #expect(html.contains("<li>a\n<ul data-line=\"1\">\n<li>b</li>\n<li>c</li>\n</ul>\n</li>\n<li>d</li>\n</ul>"))
+    #expect(occurrences(of: "<ul", in: html) == 2)
+    #expect(!html.contains("<p "))
+    #expect(!html.contains("- b"))
+}
+
+@Test func orderedListKeepsNumberingAfterNestedBullets() {
+    let md = """
+    1. one
+       - sub
+    2. two
+    3. three
+    """
+    let html = MarkdownRenderer.renderHTML(from: md)
+    #expect(html.contains("<ol data-line=\"0\">\n<li>one\n<ul data-line=\"1\">\n<li>sub</li>\n</ul>\n</li>\n<li>two</li>\n<li>three</li>\n</ol>"))
+    #expect(occurrences(of: "<ol", in: html) == 1)
+    #expect(!html.contains("start="))
+}
+
+@Test func orderedListNestedInsideBulletItem() {
+    let md = """
+    - a
+      1. x
+      2. y
+    - b
+    """
+    let html = MarkdownRenderer.renderHTML(from: md)
+    #expect(html.contains("<ul data-line=\"0\">\n<li>a\n<ol data-line=\"1\">\n<li>x</li>\n<li>y</li>\n</ol>\n</li>\n<li>b</li>\n</ul>"))
+}
+
+@Test func blankLineBetweenItemsMakesListLoose() {
+    let md = """
+    * a
+    * b
+
+    * c
+    """
+    let html = MarkdownRenderer.renderHTML(from: md)
+    #expect(html.contains("<li><p data-line=\"0\">a</p>\n</li>\n<li><p data-line=\"1\">b</p>\n</li>\n<li><p data-line=\"3\">c</p>\n</li>"))
+    #expect(occurrences(of: "<ul", in: html) == 1)
+}
+
+@Test func continuationParagraphInsideListItem() {
+    let md = """
+    - a
+
+      more para
+    - b
+    """
+    let html = MarkdownRenderer.renderHTML(from: md)
+    #expect(html.contains("<ul data-line=\"0\">\n<li><p data-line=\"0\">a</p>\n<p data-line=\"2\">more para</p>\n</li>\n<li><p data-line=\"3\">b</p>\n</li>\n</ul>"))
+    #expect(occurrences(of: "<ul", in: html) == 1)
+}
+
+@Test func blankLinesNotBetweenItemsKeepListTight() {
+    let nested = MarkdownRenderer.renderHTML(from: "- a\n  - b\n\n  - c\n- d")
+    #expect(nested.contains("<ul data-line=\"0\">\n<li>a\n<ul data-line=\"1\">\n<li><p data-line=\"1\">b</p>\n</li>\n<li><p data-line=\"3\">c</p>\n</li>\n</ul>\n</li>\n<li>d</li>"))
+
+    let code = MarkdownRenderer.renderHTML(from: "- a\n  ```\n  x\n\n  y\n  ```\n- b")
+    #expect(code.contains("<li>a\n<pre data-line=\"1\"><code>x\n\ny</code></pre>\n</li>\n<li>b</li>"))
+    #expect(!code.contains("<p "))
+
+    let trailing = MarkdownRenderer.renderHTML(from: "- a\n- b\n\nafter para")
+    #expect(trailing.contains("<li>a</li>\n<li>b</li>\n</ul>\n<p data-line=\"3\">after para</p>"))
+}
+
+@Test func strikethroughNeedsDoubleTilde() {
+    let double = MarkdownRenderer.renderHTML(from: "a ~~x~~ b ~y~ c")
+    #expect(double.contains("<p data-line=\"0\">a <del>x</del> b ~y~ c</p>"))
+    #expect(occurrences(of: "<del>", in: double) == 1)
+
+    let approx = MarkdownRenderer.renderHTML(from: "51M→~25M, prometheus 15M→~7M")
+    #expect(approx.contains("<p data-line=\"0\">51M→~25M, prometheus 15M→~7M</p>"))
+    #expect(!approx.contains("<del>"))
+}
+
+@Test(arguments: [
+    ("- ~~a~~ and ~b~", "<li><del>a</del> and ~b~</li>"),
+    ("> ~~a~~ and ~b~", "<p data-line=\"0\"><del>a</del> and ~b~</p>"),
+    ("→→ ~~struck~~ and ~approx~", "<p data-line=\"0\">→→ <del>struck</del> and ~approx~</p>"),
+])
+func strikethroughAfterListOrQuotePrefix(_ md: String, _ expected: String) {
+    #expect(MarkdownRenderer.renderHTML(from: md).contains(expected))
+}
+
+@Test func strikethroughOnLazyContinuationLine() {
+    let list = MarkdownRenderer.renderHTML(from: "- foo\n~~bar~~")
+    #expect(list.contains("<li>foo\n<del>bar</del></li>"))
+
+    let quote = MarkdownRenderer.renderHTML(from: "> foo\n~~bar~~")
+    #expect(quote.contains("<p data-line=\"0\">foo\n<del>bar</del></p>"))
+}
+
+@Test func bareUrlBecomesLink() {
+    let html = MarkdownRenderer.renderHTML(from: "visit http://a.com, then https://b.org/x?q=1&r=2!")
+    #expect(html.contains("<p data-line=\"0\">visit <a href=\"http://a.com\">http://a.com</a>, then <a href=\"https://b.org/x?q=1&amp;r=2\">https://b.org/x?q=1&amp;r=2</a>!</p>"))
+}
+
+@Test(arguments: [".", ",", ";", ":", "!", "?", ")", "]"])
+func bareUrlExcludesTrailingPunctuation(_ mark: String) {
+    let html = MarkdownRenderer.renderHTML(from: "go https://example.com/a\(mark) now")
+    #expect(html.contains("go <a href=\"https://example.com/a\">https://example.com/a</a>\(mark) now"))
+}
+
+@Test func bareUrlKeepsBalancedParentheses() {
+    let url = "https://en.wikipedia.org/wiki/Swift_(programming_language)"
+    let html = MarkdownRenderer.renderHTML(from: url)
+    #expect(html.contains("<a href=\"\(url)\">\(url)</a></p>"))
+}
+
+@Test(arguments: [
+    ("[go to https://x.com now](https://y.com)", "<p data-line=\"0\"><a href=\"https://y.com\">go to https://x.com now</a></p>", 1),
+    ("<https://example.com>", "<p data-line=\"0\"><a href=\"https://example.com\">https://example.com</a></p>", 1),
+    ("`https://example.com`", "<p data-line=\"0\"><code>https://example.com</code></p>", 0),
+])
+func autolinkSkipsExistingLinksAndCode(_ md: String, _ expected: String, _ linkCount: Int) {
+    let html = MarkdownRenderer.renderHTML(from: md)
+    #expect(html.contains(expected))
+    #expect(occurrences(of: "<a ", in: html) == linkCount)
+}
+
+@Test func rawHtmlIsEscaped() {
+    let block = MarkdownRenderer.renderHTML(from: "<script>alert(1)</script>")
+    #expect(block.contains("<p data-line=\"0\">&lt;script&gt;alert(1)&lt;/script&gt;</p>"))
+    #expect(!block.contains("<script"))
+
+    let inline = MarkdownRenderer.renderHTML(from: "text <b>bold</b> <img src=x onerror=alert(1)>")
+    #expect(inline.contains("<p data-line=\"0\">text &lt;b&gt;bold&lt;/b&gt; &lt;img src=x onerror=alert(1)&gt;</p>"))
+    #expect(!inline.contains("<b>"))
+    #expect(!inline.contains("<img"))
+}
+
+@Test func bareTaskMarkersRenderAsEmptyTasks() {
+    let md = """
+    - [ ]
+    - [x]
+    """
+    let html = MarkdownRenderer.renderHTML(from: md)
+    #expect(html.contains("<ul class=\"contains-task-list\" data-line=\"0\">"))
+    #expect(html.contains("<li class=\"task-list-item\" data-md-line=\"0\"><input type=\"checkbox\" disabled></li>"))
+    #expect(html.contains("<li class=\"task-list-item checked\" data-md-line=\"1\"><input type=\"checkbox\" disabled checked></li>"))
+    #expect(!html.contains("[ ]"))
+    #expect(!html.contains("[x]"))
+}
+
+@Test func escapedTaskBracketsStayLiteral() {
+    let html = MarkdownRenderer.renderHTML(from: "- \\[ \\]")
+    #expect(html.contains("<li>[ ]</li>"))
+    #expect(!html.contains("task-list-item"))
+    #expect(!html.contains("<input"))
+}
+
+@Test func taskItemsInOrderedList() {
+    let md = """
+    1. [ ] first
+    2. [x] second
+    """
+    let html = MarkdownRenderer.renderHTML(from: md)
+    #expect(html.contains("<ol data-line=\"0\">\n<li class=\"task-list-item\" data-md-line=\"0\"><input type=\"checkbox\" disabled>first</li>\n<li class=\"task-list-item checked\" data-md-line=\"1\"><input type=\"checkbox\" disabled checked>second</li>\n</ol>"))
+    #expect(!html.contains("[ ]"))
+    #expect(!html.contains("[x]"))
+}
+
+@Test func nestedTaskItemPointsToOwnLine() {
+    let md = """
+    Tasks:
+
+    1. plan
+       - [ ] draft
+       - [x] review
+    2. ship
+    """
+    let html = MarkdownRenderer.renderHTML(from: md)
+    #expect(html.contains("<ol data-line=\"2\">\n<li>plan\n<ul class=\"contains-task-list\" data-line=\"3\">"))
+    #expect(html.contains("<li class=\"task-list-item\" data-md-line=\"3\"><input type=\"checkbox\" disabled>draft</li>"))
+    #expect(html.contains("<li class=\"task-list-item checked\" data-md-line=\"4\"><input type=\"checkbox\" disabled checked>review</li>"))
+    #expect(html.contains("</ul>\n</li>\n<li>ship</li>\n</ol>"))
+}
+
+@Test func looseTaskItemKeepsCheckboxFirst() {
+    let md = """
+    - [x] task
+
+      paragraph in task
+    """
+    let html = MarkdownRenderer.renderHTML(from: md)
+    #expect(html.contains("<li class=\"task-list-item checked\" data-md-line=\"0\"><input type=\"checkbox\" disabled checked><p data-line=\"0\">task</p>\n<p data-line=\"2\">paragraph in task</p>\n</li>"))
+}
+
+@Test func dataLineOnNestedBlocks() {
+    let md = """
+    intro
+
+    - item
+      > quoted
+    - next
+      ```
+      code
+      ```
+    """
+    let html = MarkdownRenderer.renderHTML(from: md)
+    #expect(html.contains("<li>item\n<blockquote data-line=\"3\">\n<p data-line=\"3\">quoted</p>\n</blockquote>\n</li>"))
+    #expect(html.contains("<li>next\n<pre data-line=\"5\"><code>code</code></pre>\n</li>"))
+}
+
+@Test(arguments: [
+    ("![alt text](img.png)", "<p data-line=\"0\"><img src=\"img.png\" alt=\"alt text\"></p>"),
+    ("![say \"hi\"](a.png)", "<p data-line=\"0\"><img src=\"a.png\" alt=\"say &quot;hi&quot;\"></p>"),
+])
+func imageRendersAsImgTag(_ md: String, _ expected: String) {
+    #expect(MarkdownRenderer.renderHTML(from: md).contains(expected))
+}
+
+@Test func punctuationStaysAsTyped() {
+    let html = MarkdownRenderer.renderHTML(from: "a -- b --- \"dq\" 'sq' ...")
+    #expect(html.contains("<p data-line=\"0\">a -- b --- &quot;dq&quot; 'sq' ...</p>"))
+    for smart in ["–", "—", "“", "”", "‘", "’", "…"] {
+        #expect(!html.contains(smart))
+    }
+}
+
+private func occurrences(of needle: String, in html: String) -> Int {
+    html.components(separatedBy: needle).count - 1
+}

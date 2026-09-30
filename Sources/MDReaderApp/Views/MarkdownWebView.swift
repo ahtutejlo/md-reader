@@ -427,18 +427,26 @@ struct MarkdownWebView: NSViewRepresentable {
         margin: 0.35em 0;
         padding-left: 0.2em;
     }
+    li > p { margin: 0 0 0.35em; }
+    li > p:last-child { margin-bottom: 0; }
     li::marker { color: var(--text-subtle); }
     ul ul, ol ol, ul ol, ol ul { margin: 0.25em 0 0.4em; }
 
     /* GFM task lists */
-    ul.contains-task-list { padding-left: 0.4em; list-style: none; }
+    ul.contains-task-list { padding-left: 0.4em; }
     ul.contains-task-list ul { padding-left: 1.45em; }
+    ul.contains-task-list > li:not(.task-list-item) { margin-left: 1.05em; }
     li.task-list-item {
         list-style: none;
         padding-left: 0;
         display: flex;
+        flex-wrap: wrap;
         align-items: baseline;
-        gap: 0.55em;
+        gap: 0 0.55em;
+    }
+    li.task-list-item > :not(input):not(p:first-of-type) {
+        flex-basis: 100%;
+        padding-left: 1.5em;
     }
     li.task-list-item > input[type="checkbox"] {
         appearance: none;
