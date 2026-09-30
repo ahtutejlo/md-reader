@@ -77,28 +77,127 @@ import Foundation
     #expect(reloaded.files.first?.path == alive.path)
 }
 
-@Test func fileCacheLoadPreservesUnreachableVolumeEntries() throws {
-    // Simulate a file on an unmounted external volume: both the file and its
-    // parent directory are absent. load() should keep the entry so favorites
-    // on temporarily offline volumes don't silently disappear.
+@Test func fileCacheLoadDropsFileInDeletedFolder() throws {
     let cacheURL = FileManager.default.temporaryDirectory.appendingPathComponent("cache-\(UUID()).json")
-    let offlineParent = FileManager.default.temporaryDirectory.appendingPathComponent("offline-\(UUID())", isDirectory: true)
-    let offlineFile = offlineParent.appendingPathComponent("note.md")
-    try FileManager.default.createDirectory(at: offlineParent, withIntermediateDirectories: true)
-    try "# Offline".write(to: offlineFile, atomically: true, encoding: .utf8)
+    let alive = FileManager.default.temporaryDirectory.appendingPathComponent("alive-\(UUID()).md")
+    let deletedFolder = FileManager.default.temporaryDirectory.appendingPathComponent("deleted-\(UUID())", isDirectory: true)
+    let fileInDeletedFolder = deletedFolder.appendingPathComponent("note.md")
+    try FileManager.default.createDirectory(at: deletedFolder, withIntermediateDirectories: true)
+    try "# Gone".write(to: fileInDeletedFolder, atomically: true, encoding: .utf8)
+    try "# Alive".write(to: alive, atomically: true, encoding: .utf8)
     defer {
-        try? FileManager.default.removeItem(at: offlineParent)
+        try? FileManager.default.removeItem(at: deletedFolder)
+        try? FileManager.default.removeItem(at: alive)
         try? FileManager.default.removeItem(at: cacheURL)
     }
 
     let cache = FileCache(cacheURL: cacheURL)
-    cache.addFile(url: offlineFile)
-    #expect(cache.files.count == 1)
+    cache.addFile(url: fileInDeletedFolder)
+    cache.addFile(url: alive)
+    #expect(cache.files.count == 2)
 
-    // Unmount the "volume": remove the entire parent directory.
-    try FileManager.default.removeItem(at: offlineParent)
+    try FileManager.default.removeItem(at: deletedFolder)
 
     let reloaded = FileCache(cacheURL: cacheURL)
-    #expect(reloaded.files.count == 1)
-    #expect(reloaded.files.first?.path == offlineFile.path)
+    #expect(reloaded.files.map(\.path) == [alive.path])
+}
+
+@Test func fileCacheKeepsEntryOnUnmountedVolume() throws {
+    let cacheURL = FileManager.default.temporaryDirectory.appendingPathComponent("cache-\(UUID()).json")
+    let alive = FileManager.default.temporaryDirectory.appendingPathComponent("alive-\(UUID()).md")
+    let offlinePath = "/Volumes/mdreader-offline-\(UUID())/note.md"
+    try "# Alive".write(to: alive, atomically: true, encoding: .utf8)
+    defer {
+        try? FileManager.default.removeItem(at: alive)
+        try? FileManager.default.removeItem(at: cacheURL)
+    }
+    try writeCache(paths: [offlinePath, alive.path], to: cacheURL)
+
+    let cache = FileCache(cacheURL: cacheURL)
+    #expect(cache.files.map(\.path) == [offlinePath, alive.path])
+
+    cache.pruneMissingFiles()
+    #expect(cache.files.map(\.path) == [offlinePath, alive.path])
+}
+
+@Test(.enabled(if: mountedVolume != nil, "no mounted volume under /Volumes"))
+func fileCacheDropsMissingFileOnMountedVolume() throws {
+    let volume = try #require(mountedVolume)
+    let cacheURL = FileManager.default.temporaryDirectory.appendingPathComponent("cache-\(UUID()).json")
+    let alive = FileManager.default.temporaryDirectory.appendingPathComponent("alive-\(UUID()).md")
+    let missingOnVolume = "/Volumes/\(volume)/mdreader-missing-\(UUID()).md"
+    try "# Alive".write(to: alive, atomically: true, encoding: .utf8)
+    defer {
+        try? FileManager.default.removeItem(at: alive)
+        try? FileManager.default.removeItem(at: cacheURL)
+    }
+    try writeCache(paths: [missingOnVolume, alive.path], to: cacheURL)
+
+    let cache = FileCache(cacheURL: cacheURL)
+    #expect(cache.files.map(\.path) == [alive.path])
+}
+
+@Test func fileCachePruneKeepsOpenMissingFileOnlyUntilRelaunch() throws {
+    let tmp = FileManager.default.temporaryDirectory
+    let cacheURL = tmp.appendingPathComponent("cache-\(UUID()).json")
+    let alive = tmp.appendingPathComponent("alive-\(UUID()).md")
+    let deletedOpen = tmp.appendingPathComponent("deleted-open-\(UUID()).md")
+    let deletedOther = tmp.appendingPathComponent("deleted-other-\(UUID()).md")
+    for file in [alive, deletedOpen, deletedOther] {
+        try "# Note".write(to: file, atomically: true, encoding: .utf8)
+    }
+    defer {
+        for file in [alive, deletedOpen, deletedOther, cacheURL] {
+            try? FileManager.default.removeItem(at: file)
+        }
+    }
+
+    let cache = FileCache(cacheURL: cacheURL)
+    for file in [alive, deletedOpen, deletedOther] {
+        cache.addFile(url: file)
+    }
+    try FileManager.default.removeItem(at: deletedOpen)
+    try FileManager.default.removeItem(at: deletedOther)
+
+    cache.pruneMissingFiles(keeping: deletedOpen.path)
+    #expect(cache.files.map(\.path).sorted() == [alive.path, deletedOpen.path].sorted())
+
+    let saved = try JSONDecoder.iso8601.decode([CachedFile].self, from: Data(contentsOf: cacheURL))
+    #expect(saved.map(\.path).sorted() == [alive.path, deletedOpen.path].sorted(), "prune must be saved to disk")
+
+    let relaunched = FileCache(cacheURL: cacheURL)
+    #expect(relaunched.files.map(\.path) == [alive.path])
+}
+
+@Test func fileCacheDropsMissingFavorite() throws {
+    let cacheURL = FileManager.default.temporaryDirectory.appendingPathComponent("cache-\(UUID()).json")
+    let alive = FileManager.default.temporaryDirectory.appendingPathComponent("alive-\(UUID()).md")
+    let favorite = FileManager.default.temporaryDirectory.appendingPathComponent("favorite-\(UUID()).md")
+    try "# Alive".write(to: alive, atomically: true, encoding: .utf8)
+    try "# Favorite".write(to: favorite, atomically: true, encoding: .utf8)
+    defer {
+        try? FileManager.default.removeItem(at: alive)
+        try? FileManager.default.removeItem(at: favorite)
+        try? FileManager.default.removeItem(at: cacheURL)
+    }
+
+    let cache = FileCache(cacheURL: cacheURL)
+    cache.addFile(url: alive)
+    cache.addFile(url: favorite)
+    cache.toggleFavorite(path: favorite.path)
+    #expect(cache.files.first { $0.path == favorite.path }?.isFavorite == true)
+
+    try FileManager.default.removeItem(at: favorite)
+    cache.pruneMissingFiles()
+
+    #expect(cache.files.map(\.path) == [alive.path])
+}
+
+private let mountedVolume: String? = (try? FileManager.default.contentsOfDirectory(atPath: "/Volumes"))?
+    .first { !$0.hasPrefix(".") }
+
+private func writeCache(paths: [String], to url: URL) throws {
+    let lastOpened = ISO8601DateFormatter().string(from: Date())
+    let entries = paths.map { ["path": $0, "lastOpened": lastOpened] }
+    try JSONSerialization.data(withJSONObject: entries).write(to: url)
 }

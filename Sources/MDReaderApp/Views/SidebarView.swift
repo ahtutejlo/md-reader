@@ -38,6 +38,10 @@ struct SidebarView: View {
                             NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: file.path)])
                         }
                         .disabled(!file.exists)
+                        Button("Copy Path") {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(file.path, forType: .string)
+                        }
                         Divider()
                         Button("Remove from List", role: .destructive) {
                             onRemove(file)

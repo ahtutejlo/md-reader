@@ -39,27 +39,31 @@ class FileCache {
         save()
     }
 
+    func pruneMissingFiles(keeping keptPath: String? = nil) {
+        let kept = files.filter { $0.path == keptPath || Self.shouldKeep(path: $0.path) }
+        guard kept.count != files.count else { return }
+        files = kept
+        save()
+    }
+
     private func load() {
         guard let data = try? Data(contentsOf: cacheURL),
               let decoded = try? JSONDecoder.iso8601.decode([CachedFile].self, from: data) else {
             return
         }
-        let existing = decoded.filter { Self.shouldKeep(cached: $0) }
-        files = existing
-        if existing.count != decoded.count {
-            save()
-        }
+        files = decoded
+        pruneMissingFiles()
     }
 
-    /// Keep a cached entry if its file exists, OR if its parent directory is
-    /// unreachable (e.g. unmounted external/network volume) — we can't tell a
-    /// deleted file apart from a temporarily offline one, so err on the side of
-    /// preserving user favorites.
-    private static func shouldKeep(cached: CachedFile) -> Bool {
+    /// A missing file on an unmounted external volume may come back, so its
+    /// entry is kept; anywhere else a missing file means it was deleted.
+    private static func shouldKeep(path: String) -> Bool {
         let fm = FileManager.default
-        if fm.fileExists(atPath: cached.path) { return true }
-        let parent = (cached.path as NSString).deletingLastPathComponent
-        return !fm.fileExists(atPath: parent)
+        if fm.fileExists(atPath: path) { return true }
+        let components = (path as NSString).pathComponents
+        guard components.count > 2, components[1] == "Volumes" else { return false }
+        let volumeRoot = NSString.path(withComponents: Array(components.prefix(3)))
+        return !fm.fileExists(atPath: volumeRoot)
     }
 
     private func save() {
