@@ -3,6 +3,7 @@ import SwiftUI
 struct ContentView: View {
     let fileURL: URL?
     @Bindable var viewModel: EditorViewModel
+    var onOpenMarkdown: (URL) -> Void
 
     var body: some View {
         Group {
@@ -22,12 +23,12 @@ struct ContentView: View {
                         HSplitView {
                             MarkdownEditorView(viewModel: viewModel)
                                 .frame(minWidth: 200)
-                            MarkdownWebView(viewModel: viewModel)
+                            MarkdownWebView(viewModel: viewModel, onOpenMarkdown: onOpenMarkdown)
                                 .frame(minWidth: 200)
                         }
 
                     case .preview:
-                        MarkdownWebView(viewModel: viewModel)
+                        MarkdownWebView(viewModel: viewModel, onOpenMarkdown: onOpenMarkdown)
                     }
                 }
             } else {
