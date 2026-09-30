@@ -12,6 +12,7 @@ struct MarkdownWebView: NSViewRepresentable {
     func makeNSView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
         config.userContentController.add(context.coordinator, name: "mdToggleTask")
+        config.userContentController.add(context.coordinator, name: "mdCopyCode")
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.setValue(false, forKey: "drawsBackground")
         webView.navigationDelegate = context.coordinator
@@ -111,10 +112,18 @@ struct MarkdownWebView: NSViewRepresentable {
         // MARK: - WKScriptMessageHandler
 
         func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
-            guard message.name == "mdToggleTask",
-                  let body = message.body as? [String: Any],
-                  let line = body["line"] as? Int else { return }
-            viewModel?.toggleTaskAt(line: line)
+            switch message.name {
+            case "mdToggleTask":
+                guard let body = message.body as? [String: Any],
+                      let line = body["line"] as? Int else { return }
+                viewModel?.toggleTaskAt(line: line)
+            case "mdCopyCode":
+                guard let text = message.body as? String else { return }
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(text, forType: .string)
+            default:
+                break
+            }
         }
 
         /// Encodes a Swift String as a valid JavaScript string literal via JSON.
@@ -155,6 +164,7 @@ struct MarkdownWebView: NSViewRepresentable {
             target.querySelectorAll("pre code").forEach(function(el) {
                 hljs.highlightElement(el);
             });
+            target.querySelectorAll("pre > code").forEach(addCopyButton);
             target.querySelectorAll("li.task-list-item > input[type='checkbox']").forEach(function(input) {
                 input.removeAttribute("disabled");
                 input.tabIndex = -1;
@@ -163,6 +173,30 @@ struct MarkdownWebView: NSViewRepresentable {
             document.documentElement.scrollTop = scrollY;
         });
     };
+    function addCopyButton(code) {
+        const pre = code.parentElement;
+        const wrapper = document.createElement("div");
+        wrapper.className = "code-block";
+        pre.before(wrapper);
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "copy-code";
+        button.textContent = "Copy";
+        button.setAttribute("aria-label", "Copy code");
+        button.addEventListener("click", function() {
+            if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.mdCopyCode) {
+                window.webkit.messageHandlers.mdCopyCode.postMessage(code.textContent);
+            }
+            button.textContent = "Copied";
+            button.classList.add("copied");
+            clearTimeout(button.resetTimer);
+            button.resetTimer = setTimeout(function() {
+                button.textContent = "Copy";
+                button.classList.remove("copied");
+            }, 1500);
+        });
+        wrapper.append(pre, button);
+    }
     function onTaskCheckboxClick(e) {
         const input = e.currentTarget;
         const li = input.closest("li.task-list-item");
@@ -315,6 +349,36 @@ struct MarkdownWebView: NSViewRepresentable {
     }
 
     /* Fenced code blocks */
+    .code-block {
+        position: relative;
+        margin: 1.4em 0;
+    }
+    .code-block > pre { margin: 0; }
+    .copy-code {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        font-family: var(--font-sans);
+        font-size: 11.5px;
+        font-weight: 500;
+        line-height: 1;
+        padding: 5px 9px;
+        color: var(--text-muted);
+        background: var(--surface);
+        border: 1px solid var(--border-strong);
+        border-radius: 6px;
+        cursor: pointer;
+        user-select: none;
+        -webkit-user-select: none;
+        opacity: 0;
+        transition: opacity 140ms ease, color 140ms ease, border-color 140ms ease;
+    }
+    .code-block:hover .copy-code,
+    .copy-code:focus-visible,
+    .copy-code.copied { opacity: 1; }
+    .copy-code:hover { color: var(--text); border-color: var(--accent-soft); }
+    .copy-code:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .copy-code.copied { color: var(--accent); border-color: var(--accent-soft); }
     pre {
         font-family: var(--font-mono);
         background: var(--surface);
@@ -459,7 +523,7 @@ struct MarkdownWebView: NSViewRepresentable {
     /* Respect users who prefer reduced motion */
     @media (prefers-reduced-motion: reduce) {
         html { scroll-behavior: auto; }
-        a, tbody tr { transition: none; }
+        a, tbody tr, .copy-code { transition: none; }
     }
     """
 }

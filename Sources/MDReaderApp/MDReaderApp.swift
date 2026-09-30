@@ -29,6 +29,12 @@ struct MDReaderApp: App {
                 let fileURL = URL(fileURLWithPath: url.path)
                 openMarkdownFile(fileURL)
             }
+            .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+                fileCache.pruneMissingFiles(keeping: selectedFilePath)
+            }
+            .onChange(of: selectedFilePath) {
+                fileCache.pruneMissingFiles(keeping: selectedFilePath)
+            }
             .toolbar {
                 ToolbarItem(placement: .automatic) {
                     if selectedFilePath != nil && viewModel.viewMode != .preview {
