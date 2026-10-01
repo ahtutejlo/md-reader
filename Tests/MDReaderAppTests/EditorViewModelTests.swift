@@ -205,3 +205,70 @@ func toggleTaskIgnoresBracketsWithoutListMarker(_ source: String) {
     vm.toggleTaskAt(line: line)
     #expect(vm.text == "1. parent\n   1) [x] child\n2. sibling")
 }
+
+@Test func openingAnotherFileSavesPendingEdit() throws {
+    let first = try writeTempNote("original A")
+    let second = try writeTempNote("original B")
+    defer {
+        try? FileManager.default.removeItem(at: first)
+        try? FileManager.default.removeItem(at: second)
+    }
+    let vm = EditorViewModel()
+    vm.loadFile(url: first)
+    vm.text = "edited A"
+    vm.textDidChange()
+
+    vm.loadFile(url: second)
+
+    #expect(try String(contentsOf: first, encoding: .utf8) == "edited A")
+    #expect(try String(contentsOf: second, encoding: .utf8) == "original B")
+    #expect(vm.fileURL == second)
+    #expect(vm.text == "original B")
+    #expect(vm.hasUnsavedChanges == false)
+}
+
+@Test func closingFileSavesPendingEdit() throws {
+    let file = try writeTempNote("original")
+    defer { try? FileManager.default.removeItem(at: file) }
+    let vm = EditorViewModel()
+    vm.loadFile(url: file)
+    vm.text = "edited"
+    vm.textDidChange()
+
+    vm.clearFile()
+
+    #expect(try String(contentsOf: file, encoding: .utf8) == "edited")
+    #expect(vm.fileURL == nil)
+    #expect(vm.text == "")
+    #expect(vm.hasUnsavedChanges == false)
+}
+
+@Test func openingAnotherFileWithoutEditsDoesNotRewritePrevious() throws {
+    let first = try writeTempNote("original A")
+    let second = try writeTempNote("original B")
+    defer {
+        try? FileManager.default.removeItem(at: first)
+        try? FileManager.default.removeItem(at: second)
+    }
+    let savedAt = Date(timeIntervalSince1970: 1_750_000_000)
+    try setModificationDate(of: first, to: savedAt)
+    let vm = EditorViewModel()
+    vm.loadFile(url: first)
+
+    vm.loadFile(url: second)
+
+    #expect(try modificationDate(of: first) == savedAt)
+}
+
+@Test func closingFileWithoutEditsDoesNotRewriteIt() throws {
+    let file = try writeTempNote("original")
+    defer { try? FileManager.default.removeItem(at: file) }
+    let savedAt = Date(timeIntervalSince1970: 1_750_000_000)
+    try setModificationDate(of: file, to: savedAt)
+    let vm = EditorViewModel()
+    vm.loadFile(url: file)
+
+    vm.clearFile()
+
+    #expect(try modificationDate(of: file) == savedAt)
+}

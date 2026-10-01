@@ -2,9 +2,16 @@ import SwiftUI
 import WebKit
 import os
 
+struct PreviewHooks {
+    var openMarkdown: (URL) -> Void
+    var savedLine: (URL) -> Int?
+    var saveLine: (URL, Int) -> Void
+}
+
 struct MarkdownWebView: NSViewRepresentable {
     @Bindable var viewModel: EditorViewModel
-    var onOpenMarkdown: (URL) -> Void
+    var hooks: PreviewHooks
+    @AppStorage(Preferences.zoomKey) private var zoom = 1.0
 
     func makeCoordinator() -> Coordinator {
         Coordinator()
@@ -15,31 +22,38 @@ struct MarkdownWebView: NSViewRepresentable {
         config.userContentController.add(context.coordinator, name: "mdToggleTask")
         config.userContentController.add(context.coordinator, name: "mdCopyCode")
         config.userContentController.add(context.coordinator, name: "mdOpenLink")
+        config.userContentController.add(context.coordinator, name: "mdScrollState")
+        config.userContentController.add(context.coordinator, name: "mdCopySection")
         config.setURLSchemeHandler(LocalAssetSchemeHandler(), forURLScheme: LocalAssetSchemeHandler.scheme)
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.setValue(false, forKey: "drawsBackground")
         webView.navigationDelegate = context.coordinator
+        webView.pageZoom = zoom
         context.coordinator.webView = webView
         context.coordinator.viewModel = viewModel
-        context.coordinator.onOpenMarkdown = onOpenMarkdown
+        context.coordinator.hooks = hooks
+        viewModel.preview = context.coordinator
         webView.loadHTMLString(Self.shellHTML, baseURL: nil)
         return webView
     }
 
     func updateNSView(_ webView: WKWebView, context: Context) {
-        context.coordinator.viewModel = viewModel
-        context.coordinator.onOpenMarkdown = onOpenMarkdown
-        context.coordinator.onUpdate(
-            markdown: viewModel.text,
-            activeLine: viewModel.activeLine
-        )
+        let coordinator = context.coordinator
+        coordinator.viewModel = viewModel
+        coordinator.hooks = hooks
+        viewModel.preview = coordinator
+        if webView.pageZoom != zoom {
+            webView.pageZoom = zoom
+        }
+        coordinator.onUpdate(markdown: viewModel.text, activeLine: viewModel.activeLine)
     }
 
-    final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
+    final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler, PreviewController {
         weak var webView: WKWebView?
         weak var viewModel: EditorViewModel?
-        var onOpenMarkdown: ((URL) -> Void)?
+        var hooks: PreviewHooks?
         var isLoaded = false
+        private var renderedFileURL: URL?
         var lastMarkdownHash: Int = 0
         var lastActiveLine: Int?
         var pendingMarkdown: String?
@@ -100,21 +114,57 @@ struct MarkdownWebView: NSViewRepresentable {
 
         private func pushUpdate(markdown: String, thenScrollTo scrollLine: Int?) {
             guard let webView else { return }
-            let html = MarkdownRenderer.renderHTML(from: markdown, baseDirectory: documentDirectory)
-            guard let encoded = jsStringLiteral(html) else {
+            let fileURL = viewModel?.fileURL
+            let rendered = MarkdownRenderer.render(markdown, baseDirectory: documentDirectory)
+            if viewModel?.outline != rendered.outline {
+                viewModel?.outline = rendered.outline
+            }
+            let isNewDocument = fileURL != renderedFileURL
+            renderedFileURL = fileURL
+            var options: [String: Any] = ["doc": fileURL?.path ?? ""]
+            if isNewDocument {
+                options["restoreLine"] = fileURL.flatMap { hooks?.savedLine($0) } ?? 0
+                if let scrollLine { lastActiveLine = scrollLine }
+            }
+            guard let html = jsonLiteral(rendered.html), let optionsLiteral = jsonLiteral(options) else {
                 log.error("Failed to encode HTML for JS")
                 return
             }
-            let script = "window.mdUpdate(\(encoded));"
-            webView.evaluateJavaScript(script) { [weak self] _, error in
+            webView.evaluateJavaScript("window.mdUpdate(\(html), \(optionsLiteral));") { [weak self] _, error in
                 if let error {
                     self?.log.error("mdUpdate failed: \(error.localizedDescription)")
                 }
-                if let line = scrollLine {
+                if !isNewDocument, let line = scrollLine {
                     self?.pushScroll(line: line)
                 }
             }
-            // textVersion is tracked in onUpdate; no need for string copy here.
+        }
+
+        func scrollToAnchor(_ id: String) {
+            guard let literal = jsonLiteral(id) else { return }
+            webView?.evaluateJavaScript("window.mdScrollToAnchor(\(literal));")
+        }
+
+        func find(_ text: String, backwards: Bool, restart: Bool) {
+            guard let webView else { return }
+            guard !text.isEmpty else {
+                // WebKit keeps the yellow match marker until the DOM it points at is replaced.
+                viewModel?.findMatched = true
+                if let markdown = viewModel?.text {
+                    pushUpdate(markdown: markdown, thenScrollTo: nil)
+                }
+                return
+            }
+            let configuration = WKFindConfiguration()
+            configuration.backwards = backwards
+            configuration.caseSensitive = false
+            configuration.wraps = true
+            let prepare = restart ? "window.getSelection().rangeCount && window.getSelection().collapseToStart();" : ""
+            webView.evaluateJavaScript(prepare) { [weak self] _, _ in
+                webView.find(text, configuration: configuration) { result in
+                    self?.viewModel?.findMatched = result.matchFound
+                }
+            }
         }
 
         private func pushScroll(line: Int) {
@@ -137,11 +187,25 @@ struct MarkdownWebView: NSViewRepresentable {
                 viewModel?.toggleTaskAt(line: line)
             case "mdCopyCode":
                 guard let text = message.body as? String else { return }
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(text, forType: .string)
+                RichClipboard.copy(text: text)
             case "mdOpenLink":
                 guard let href = message.body as? String else { return }
                 openLink(href)
+            case "mdScrollState":
+                guard let body = message.body as? [String: Any],
+                      let doc = body["doc"] as? String,
+                      let fileURL = viewModel?.fileURL, doc == fileURL.path else { return }
+                if let line = body["line"] as? Int {
+                    hooks?.saveLine(fileURL, line)
+                }
+                let heading = body["heading"] as? String
+                if viewModel?.currentHeadingID != heading {
+                    viewModel?.currentHeadingID = heading
+                }
+            case "mdCopySection":
+                guard let start = message.body as? Int, let viewModel else { return }
+                let end = viewModel.outline.sectionEnd(startingAt: start)
+                RichClipboard.copy(markdown: RichClipboard.section(of: viewModel.text, from: start, to: end))
             default:
                 break
             }
@@ -152,7 +216,7 @@ struct MarkdownWebView: NSViewRepresentable {
             case .external(let url):
                 NSWorkspace.shared.open(url)
             case .markdown(let url) where FileManager.default.fileExists(atPath: url.path):
-                onOpenMarkdown?(url)
+                hooks?.openMarkdown(url)
             case .localFile(let url) where FileManager.default.fileExists(atPath: url.path):
                 NSWorkspace.shared.activateFileViewerSelecting([url])
             default:
@@ -160,15 +224,9 @@ struct MarkdownWebView: NSViewRepresentable {
             }
         }
 
-        /// Encodes a Swift String as a valid JavaScript string literal via JSON.
-        private func jsStringLiteral(_ s: String) -> String? {
-            guard let data = try? JSONSerialization.data(withJSONObject: [s], options: []),
-                  let jsonArray = String(data: data, encoding: .utf8) else { return nil }
-            // jsonArray is like `["..."]`; strip brackets to get the quoted literal.
-            var trimmed = jsonArray
-            if trimmed.hasPrefix("[") { trimmed.removeFirst() }
-            if trimmed.hasSuffix("]") { trimmed.removeLast() }
-            return trimmed
+        private func jsonLiteral(_ value: Any) -> String? {
+            guard let data = try? JSONSerialization.data(withJSONObject: value, options: .fragmentsAllowed) else { return nil }
+            return String(decoding: data, as: UTF8.self)
         }
     }
 
@@ -187,7 +245,8 @@ struct MarkdownWebView: NSViewRepresentable {
     <body>
     <div id="content"></div>
     <script>
-    window.mdUpdate = function(html) {
+    const headingSelector = ":is(h1, h2, h3, h4, h5, h6)[id]";
+    window.mdUpdate = function(html, options) {
         const target = document.getElementById("content");
         const scrollY = document.documentElement.scrollTop;
         // Parse off-screen, then swap in a single rAF to batch into one paint.
@@ -198,29 +257,48 @@ struct MarkdownWebView: NSViewRepresentable {
             target.querySelectorAll("pre code").forEach(function(el) {
                 hljs.highlightElement(el);
             });
-            target.querySelectorAll("pre > code").forEach(addCopyButton);
+            target.querySelectorAll("pre > code").forEach(addCodeCopyButton);
             target.querySelectorAll("li.task-list-item > input[type='checkbox']").forEach(function(input) {
                 input.removeAttribute("disabled");
                 input.tabIndex = -1;
                 input.addEventListener("click", onTaskCheckboxClick);
             });
-            document.documentElement.scrollTop = scrollY;
+            target.querySelectorAll(":scope > " + headingSelector).forEach(function(heading) {
+                heading.append(makeCopyButton("copy-section", "Copy section", function() {
+                    post("mdCopySection", lineOf(heading));
+                }));
+            });
+            window.mdDocument = options.doc;
+            if (options.restoreLine != null) {
+                scrollLineToTop(options.restoreLine);
+            } else {
+                window.scrollTo({ top: scrollY, behavior: "instant" });
+            }
+            reportScrollState();
         });
     };
-    function addCopyButton(code) {
-        const pre = code.parentElement;
-        const wrapper = document.createElement("div");
-        wrapper.className = "code-block";
-        pre.before(wrapper);
+    function post(name, body) {
+        const handlers = window.webkit && window.webkit.messageHandlers;
+        if (handlers && handlers[name]) handlers[name].postMessage(body);
+    }
+    function lineOf(element) {
+        return parseInt(element.getAttribute("data-line"), 10);
+    }
+    function blockAtLine(blocks, line) {
+        let match = null;
+        for (const block of blocks) {
+            if (lineOf(block) <= line) match = block; else break;
+        }
+        return match;
+    }
+    function makeCopyButton(className, label, onCopy) {
         const button = document.createElement("button");
         button.type = "button";
-        button.className = "copy-code";
+        button.className = className;
         button.textContent = "Copy";
-        button.setAttribute("aria-label", "Copy code");
+        button.setAttribute("aria-label", label);
         button.addEventListener("click", function() {
-            if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.mdCopyCode) {
-                window.webkit.messageHandlers.mdCopyCode.postMessage(code.textContent);
-            }
+            onCopy();
             button.textContent = "Copied";
             button.classList.add("copied");
             clearTimeout(button.resetTimer);
@@ -229,8 +307,48 @@ struct MarkdownWebView: NSViewRepresentable {
                 button.classList.remove("copied");
             }, 1500);
         });
-        wrapper.append(pre, button);
+        return button;
     }
+    function addCodeCopyButton(code) {
+        const pre = code.parentElement;
+        const wrapper = document.createElement("div");
+        wrapper.className = "code-block";
+        pre.before(wrapper);
+        wrapper.append(pre, makeCopyButton("copy-code", "Copy code", function() {
+            post("mdCopyCode", code.textContent);
+        }));
+    }
+    function topLevelBlocks() {
+        return document.querySelectorAll("#content > [data-line], #content > .code-block > [data-line]");
+    }
+    function scrollLineToTop(line) {
+        const block = line > 0 ? blockAtLine(topLevelBlocks(), line) : null;
+        const top = block ? block.getBoundingClientRect().top + window.scrollY - 12 : 0;
+        window.scrollTo({ top: top, behavior: "instant" });
+    }
+    function topVisibleLine() {
+        for (const block of topLevelBlocks()) {
+            if (block.getBoundingClientRect().bottom > 1) return lineOf(block);
+        }
+        return 0;
+    }
+    function currentHeadingId() {
+        const headings = document.querySelectorAll("#content " + headingSelector);
+        let current = headings.length ? headings[0].id : null;
+        for (const heading of headings) {
+            if (heading.getBoundingClientRect().top <= 80) current = heading.id; else break;
+        }
+        return current;
+    }
+    let reportTimer;
+    function reportScrollState() {
+        clearTimeout(reportTimer);
+        reportTimer = setTimeout(function() {
+            if (!window.mdDocument) return;
+            post("mdScrollState", { doc: window.mdDocument, line: topVisibleLine(), heading: currentHeadingId() });
+        }, 150);
+    }
+    window.addEventListener("scroll", reportScrollState, { passive: true });
     function onTaskCheckboxClick(e) {
         const input = e.currentTarget;
         const li = input.closest("li.task-list-item");
@@ -239,10 +357,11 @@ struct MarkdownWebView: NSViewRepresentable {
         if (lineAttr == null) return;
         // Optimistic visual update; the markdown re-render will confirm it.
         li.classList.toggle("checked", input.checked);
-        if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.mdToggleTask) {
-            window.webkit.messageHandlers.mdToggleTask.postMessage({ line: parseInt(lineAttr, 10) });
-        }
+        post("mdToggleTask", { line: parseInt(lineAttr, 10) });
     }
+    window.mdScrollToAnchor = function(id) {
+        document.getElementById(id)?.scrollIntoView({ block: "start" });
+    };
     document.addEventListener("click", function(e) {
         const link = e.target.closest("a[href]");
         if (!link) return;
@@ -251,22 +370,15 @@ struct MarkdownWebView: NSViewRepresentable {
         if (href.startsWith("#")) {
             let id = href.slice(1);
             try { id = decodeURIComponent(id); } catch (_) {}
-            document.getElementById(id)?.scrollIntoView({ block: "start" });
+            window.mdScrollToAnchor(id);
             return;
         }
-        if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.mdOpenLink) {
-            window.webkit.messageHandlers.mdOpenLink.postMessage(href);
-        }
+        post("mdOpenLink", href);
     });
     window.mdScrollToLine = function(line) {
         const blocks = document.querySelectorAll("[data-line]");
-        if (!blocks.length) return;
-        let match = blocks[0];
-        for (const b of blocks) {
-            const n = parseInt(b.getAttribute("data-line"), 10);
-            if (n <= line) match = b; else break;
-        }
-        match.scrollIntoView({ block: "center", behavior: "smooth" });
+        const match = blockAtLine(blocks, line) || blocks[0];
+        if (match) match.scrollIntoView({ block: "center", behavior: "smooth" });
     };
     </script>
     </body>
@@ -403,7 +515,7 @@ struct MarkdownWebView: NSViewRepresentable {
         margin: 1.4em 0;
     }
     .code-block > pre { margin: 0; }
-    .copy-code {
+    .copy-code, .copy-section {
         position: absolute;
         top: 8px;
         right: 8px;
@@ -422,12 +534,19 @@ struct MarkdownWebView: NSViewRepresentable {
         opacity: 0;
         transition: opacity 140ms ease, color 140ms ease, border-color 140ms ease;
     }
+    .copy-section {
+        position: static;
+        margin-left: 0.6em;
+        vertical-align: middle;
+        letter-spacing: normal;
+    }
     .code-block:hover .copy-code,
-    .copy-code:focus-visible,
-    .copy-code.copied { opacity: 1; }
-    .copy-code:hover { color: var(--text); border-color: var(--accent-soft); }
-    .copy-code:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-    .copy-code.copied { color: var(--accent); border-color: var(--accent-soft); }
+    :is(h1, h2, h3, h4, h5, h6):hover > .copy-section,
+    :is(.copy-code, .copy-section):focus-visible,
+    :is(.copy-code, .copy-section).copied { opacity: 1; }
+    :is(.copy-code, .copy-section):hover { color: var(--text); border-color: var(--accent-soft); }
+    :is(.copy-code, .copy-section):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    :is(.copy-code, .copy-section).copied { color: var(--accent); border-color: var(--accent-soft); }
     pre {
         font-family: var(--font-mono);
         background: var(--surface);
@@ -580,7 +699,7 @@ struct MarkdownWebView: NSViewRepresentable {
     /* Respect users who prefer reduced motion */
     @media (prefers-reduced-motion: reduce) {
         html { scroll-behavior: auto; }
-        a, tbody tr, .copy-code { transition: none; }
+        a, tbody tr, .copy-code, .copy-section { transition: none; }
     }
     """
 }

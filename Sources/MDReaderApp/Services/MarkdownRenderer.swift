@@ -1,16 +1,40 @@
 import Foundation
 import Markdown
 
+struct OutlineItem: Identifiable, Equatable {
+    let id: String
+    let level: Int
+    let title: String
+    let line: Int
+}
+
+extension [OutlineItem] {
+    /// Source line where the section opened by the heading on `line` ends: the next
+    /// heading of the same or a higher level, or nil when it runs to the end.
+    func sectionEnd(startingAt line: Int) -> Int? {
+        let level = first { $0.line == line }?.level ?? 6
+        return first { $0.line > line && $0.level <= level }?.line
+    }
+}
+
+struct RenderedMarkdown {
+    let html: String
+    let outline: [OutlineItem]
+}
+
 enum MarkdownRenderer {
 
-    /// Converts markdown source to HTML. Block elements carry a 0-based `data-line`
-    /// source line so the preview can scroll in sync with the editor. Relative image
-    /// paths resolve against `baseDirectory`, the folder of the file being shown.
-    static func renderHTML(from source: String, baseDirectory: URL? = nil) -> String {
+    /// Block elements carry a 0-based `data-line` so the preview can scroll in sync with
+    /// the editor; relative image paths resolve against `baseDirectory`.
+    static func render(_ source: String, baseDirectory: URL? = nil) -> RenderedMarkdown {
         let document = Document(parsing: source, options: [.disableSmartOpts])
         var walker = HTMLWalker(sourceLines: source.components(separatedBy: "\n"), baseDirectory: baseDirectory)
         walker.visit(document)
-        return walker.result
+        return RenderedMarkdown(html: walker.result, outline: walker.outline)
+    }
+
+    static func renderHTML(from source: String, baseDirectory: URL? = nil) -> String {
+        render(source, baseDirectory: baseDirectory).html
     }
 }
 
@@ -22,9 +46,14 @@ private struct HTMLWalker: MarkupWalker {
     var columnAlignments: [Table.ColumnAlignment?] = []
     var inLink = false
     var usedSlugs: Set<String> = []
+    var outline: [OutlineItem] = []
 
     mutating func visitHeading(_ heading: Heading) {
-        let id = uniqueSlug(for: heading.plainText)
+        let title = plainText(of: heading)
+        let id = uniqueSlug(for: title)
+        if !id.isEmpty {
+            outline.append(OutlineItem(id: id, level: heading.level, title: title, line: (heading.range?.lowerBound.line ?? 1) - 1))
+        }
         let idAttr = id.isEmpty ? "" : " id=\"\(escapeHTML(id))\""
         wrap(heading, "<h\(heading.level)\(idAttr)\(lineAttr(heading))>", "</h\(heading.level)>\n")
     }
@@ -213,6 +242,16 @@ private struct HTMLWalker: MarkupWalker {
     private func isScriptURL(_ destination: String) -> Bool {
         let compact = destination.components(separatedBy: Self.ignoredInScheme).joined().lowercased()
         return ["javascript:", "vbscript:", "data:"].contains { compact.hasPrefix($0) }
+    }
+
+    /// Like `plainText`, but inline code contributes its code without the backticks.
+    private func plainText(of markup: Markup) -> String {
+        switch markup {
+        case let text as Text: text.string
+        case let code as InlineCode: code.code
+        case is SoftBreak, is LineBreak: " "
+        default: markup.children.map(plainText(of:)).joined()
+        }
     }
 
     private func lineAttr(_ markup: Markup, name: String = "data-line") -> String {

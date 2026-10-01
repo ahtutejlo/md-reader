@@ -1,8 +1,7 @@
 import AppKit
 
 enum MarkdownSyntaxHighlighter {
-    private static let monoFont = NSFont.monospacedSystemFont(ofSize: 14, weight: .regular)
-    private static let boldMonoFont = NSFont.monospacedSystemFont(ofSize: 14, weight: .bold)
+    static let baseFontSize: CGFloat = 14
 
     private static var fenceColor: NSColor { .secondaryLabelColor }
 
@@ -43,7 +42,9 @@ enum MarkdownSyntaxHighlighter {
     private static let linkRegex = try! NSRegularExpression(pattern: #"\[[^\]]+\]\([^)]+\)"#, options: [.anchorsMatchLines])
     private static let blockquoteRegex = try! NSRegularExpression(pattern: #"^>.*$"#, options: [.anchorsMatchLines])
 
-    static func highlight(_ text: String) -> NSMutableAttributedString {
+    static func highlight(_ text: String, fontSize: CGFloat = baseFontSize) -> NSMutableAttributedString {
+        let monoFont = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
+        let boldMonoFont = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .bold)
         let result = NSMutableAttributedString(
             string: text,
             attributes: [

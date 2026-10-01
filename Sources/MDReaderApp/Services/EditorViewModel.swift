@@ -10,6 +10,11 @@ class EditorViewModel {
     var saveError: Error?
     var pendingFormat: MarkdownFormatAction?
     var activeLine: Int = 0
+    var outline: [OutlineItem] = []
+    var currentHeadingID: String?
+    var isFindVisible = false
+    var findMatched = true
+    @ObservationIgnored weak var preview: PreviewController?
     private(set) var fileURL: URL?
     private(set) var textVersion: Int = 0
 
@@ -18,6 +23,7 @@ class EditorViewModel {
     private var isReloading = false
 
     func loadFile(url: URL) {
+        saveIfNeeded()
         autoSaveTask?.cancel()
         stopMonitoring()
         do {
@@ -29,6 +35,7 @@ class EditorViewModel {
             loadError = nil
             textVersion += 1
             activeLine = 0
+            currentHeadingID = nil
             startMonitoring()
         } catch {
             loadError = error
@@ -36,6 +43,7 @@ class EditorViewModel {
     }
 
     func clearFile() {
+        saveIfNeeded()
         autoSaveTask?.cancel()
         stopMonitoring()
         fileURL = nil
@@ -46,6 +54,15 @@ class EditorViewModel {
         saveError = nil
         textVersion += 1
         activeLine = 0
+        outline = []
+        currentHeadingID = nil
+        isFindVisible = false
+    }
+
+    private func saveIfNeeded() {
+        if hasUnsavedChanges, fileURL != nil {
+            save()
+        }
     }
 
     func textDidChange() {
@@ -174,4 +191,9 @@ class EditorViewModel {
         autoSaveTask?.cancel()
         stopMonitoring()
     }
+}
+
+protocol PreviewController: AnyObject {
+    func scrollToAnchor(_ id: String)
+    func find(_ text: String, backwards: Bool, restart: Bool)
 }

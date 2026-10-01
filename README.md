@@ -7,11 +7,26 @@ A native macOS markdown reader application built with SwiftUI. MDReader provides
 - **Markdown rendering** with GitHub-flavored syntax — headings, nested lists, task lists, tables, code blocks, blockquotes, strikethrough, images, links
 - **Code syntax highlighting** powered by highlight.js
 - **Dark and light mode** — follows system appearance automatically
-- **File sidebar** with search, recent files sorted by last opened, and visual indicators for missing files
+- **File sidebar** — recent files grouped by project (git repository) or as one list, search by name and by text inside the files
+- **Outline** — headings of the open file in a side panel; click to jump, the current section is highlighted
+- **Find in document**, **zoom**, and **remembered reading position** per file
+- **Copy a section or the whole document** with formatting (for Slack, Notion) and as markdown (for editors)
 - **Multiple ways to open files** — file picker, drag-and-drop, CLI tool, or `mdreader://` URL scheme
 - **CLI companion tool** — open markdown files from the terminal with `mdreader <file>`
 - **Persistent file cache** — recently opened files are remembered across app launches
 - **Minimal dependencies** — native Apple frameworks plus Apple's [swift-markdown](https://github.com/swiftlang/swift-markdown) parser
+
+## Keyboard Shortcuts
+
+| Shortcut | Action |
+|---|---|
+| ⌘P | Open a recent file by name |
+| ⌘W | Close the open file; with no file open, close the window |
+| ⌘F | Find in the document |
+| ⌥⌘0 | Show or hide the outline |
+| ⌘= / ⌘- / ⌘0 | Zoom in / out / actual size |
+| ⌥⌘C | Copy the whole document |
+| ⇧⌘D | Toggle favorite |
 
 ## Requirements
 
