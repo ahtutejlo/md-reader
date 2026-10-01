@@ -27,6 +27,10 @@ struct CachedFile: Identifiable, Codable, Equatable {
         return path
     }
 
+    var displayDirectory: String {
+        (displayPath as NSString).deletingLastPathComponent
+    }
+
     enum CodingKeys: String, CodingKey {
         case path, lastOpened, isFavorite, lastLine
     }

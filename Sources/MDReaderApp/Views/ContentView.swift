@@ -79,6 +79,7 @@ struct ContentView: View {
 
     private var preview: some View {
         MarkdownWebView(viewModel: viewModel, hooks: hooks)
+            .background(MarkdownWebView.paper)
             .overlay(alignment: .top) {
                 if viewModel.isFindVisible {
                     FindBar(viewModel: viewModel)
