@@ -35,8 +35,9 @@ struct SidebarView: View {
                     Text("Favorites").tag(true)
                 }
                 .pickerStyle(.segmented)
+                .labelsHidden()
                 Toggle(isOn: $groupByProject) {
-                    Label("Group by Project", systemImage: "folder")
+                    Label("Group by Project", systemImage: "rectangle.3.group")
                         .labelStyle(.iconOnly)
                 }
                 .toggleStyle(.button)
@@ -63,7 +64,7 @@ struct SidebarView: View {
                 remove(visibleFiles(in: selection))
             }
         }
-        .searchable(text: $searchText, prompt: "Search names and text")
+        .searchable(text: $searchText, placement: .sidebar, prompt: "Search names and text")
         .navigationSplitViewColumnWidth(min: 200, ideal: 250)
         .onChange(of: selectedFilePath, initial: true) {
             selection = selectedFilePath.map { Set([$0]) } ?? []
@@ -153,8 +154,8 @@ struct FileRow: View {
                     .buttonStyle(.plain)
                 }
             }
-            Text(file.displayPath)
-                .font(.caption2)
+            Text("\(file.displayDirectory) · \(file.lastOpened, format: .relative(presentation: .named))")
+                .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .truncationMode(.middle)
@@ -163,10 +164,6 @@ struct FileRow: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
-            } else {
-                Text(file.lastOpened, style: .relative)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             }
         }
         .padding(.vertical, 2)

@@ -13,6 +13,14 @@ struct MarkdownWebView: NSViewRepresentable {
     var hooks: PreviewHooks
     @AppStorage(Preferences.zoomKey) private var zoom = 1.0
 
+    /// Page color behind the transparent web view; previewCSS colors are tuned against it.
+    static let paper = Color(nsColor: NSColor(name: nil) { appearance in
+        switch appearance.bestMatch(from: [.aqua, .darkAqua]) {
+        case .darkAqua: NSColor(srgbRed: 31 / 255, green: 29 / 255, blue: 26 / 255, alpha: 1)
+        default: NSColor(srgbRed: 251 / 255, green: 249 / 255, blue: 244 / 255, alpha: 1)
+        }
+    })
+
     func makeCoordinator() -> Coordinator {
         Coordinator()
     }
@@ -407,36 +415,51 @@ struct MarkdownWebView: NSViewRepresentable {
         --text-subtle:   light-dark(#8c8478, #766e66);
         --accent:        light-dark(#9a4a12, #e3995a);
         --accent-soft:   light-dark(#c2784a, #c68860);
-        --border:        light-dark(#e8e2d6, #2b2823);
-        --border-strong: light-dark(#d2ccbe, #3a3630);
-        --surface:       light-dark(#f4efe4, #1c1a16);
+        --border:        light-dark(#e8e2d6, #36322b);
+        --border-strong: light-dark(#d2ccbe, #4a443b);
+        --surface:       light-dark(#f4efe4, #29261f);
         --code-text:     light-dark(#8a3a0c, #f1a775);
         --selection:     light-dark(rgba(154, 74, 18, 0.18), rgba(227, 153, 90, 0.24));
         --font-serif:    ui-serif, "New York", "Charter", "Iowan Old Style", Georgia, serif;
         --font-sans:     -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
         --font-mono:     ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+        --measure:       35rem;
     }
 
     * { box-sizing: border-box; }
 
     ::selection { background: var(--selection); }
 
-    html { scroll-behavior: smooth; }
+    html {
+        font-size: 15px;
+        scroll-behavior: smooth;
+    }
 
     body {
         font-family: var(--font-sans);
-        font-size: 15px;
         line-height: 1.72;
         color: var(--text);
         background: transparent;
         padding: clamp(24px, 3.5vw, 52px) clamp(24px, 4vw, 56px) clamp(48px, 7vw, 88px);
-        max-width: 90ch;
-        margin: 0 auto;
+        margin: 0;
         -webkit-font-smoothing: antialiased;
         font-feature-settings: "kern", "liga", "calt";
         text-rendering: optimizeLegibility;
     }
 
+    #content {
+        max-width: 48rem;
+        margin-inline: auto;
+    }
+    #content > * {
+        max-width: var(--measure);
+        margin-inline: auto;
+    }
+    #content > :is(.code-block, table) {
+        width: fit-content;
+        min-width: min(var(--measure), 100%);
+        max-width: 100%;
+    }
     #content > *:first-child { margin-top: 0; }
     #content > *:last-child { margin-bottom: 0; }
 
