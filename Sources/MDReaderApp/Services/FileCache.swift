@@ -28,8 +28,9 @@ class FileCache {
         save()
     }
 
-    func removeFile(_ file: CachedFile) {
-        files.removeAll { $0.id == file.id }
+    func removeFiles(paths: Set<String>) {
+        guard files.contains(where: { paths.contains($0.path) }) else { return }
+        files.removeAll { paths.contains($0.path) }
         save()
     }
 

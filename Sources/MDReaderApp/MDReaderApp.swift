@@ -18,7 +18,7 @@ struct MDReaderApp: App {
                 SidebarView(
                     files: fileCache.files,
                     selectedFilePath: $selectedFilePath,
-                    onRemove: { fileCache.removeFile($0) },
+                    onRemove: { fileCache.removeFiles(paths: $0) },
                     onToggleFavorite: { fileCache.toggleFavorite(path: $0) }
                 )
             } detail: {
