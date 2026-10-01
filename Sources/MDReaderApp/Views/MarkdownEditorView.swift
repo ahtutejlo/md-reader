@@ -3,6 +3,7 @@ import AppKit
 
 struct MarkdownEditorView: NSViewRepresentable {
     @Bindable var viewModel: EditorViewModel
+    @AppStorage(Preferences.zoomKey) private var zoom = 1.0
 
     func makeCoordinator() -> Coordinator {
         Coordinator(viewModel: viewModel)
@@ -19,7 +20,10 @@ struct MarkdownEditorView: NSViewRepresentable {
         textView.isAutomaticQuoteSubstitutionEnabled = false
         textView.isAutomaticDashSubstitutionEnabled = false
         textView.isAutomaticTextReplacementEnabled = false
-        textView.font = NSFont.monospacedSystemFont(ofSize: 14, weight: .regular)
+        textView.usesFindBar = true
+        textView.isIncrementalSearchingEnabled = true
+        context.coordinator.fontSize = MarkdownSyntaxHighlighter.baseFontSize * zoom
+        textView.font = NSFont.monospacedSystemFont(ofSize: context.coordinator.fontSize, weight: .regular)
         textView.textColor = .labelColor
         textView.backgroundColor = .textBackgroundColor
         textView.insertionPointColor = .labelColor
@@ -35,6 +39,13 @@ struct MarkdownEditorView: NSViewRepresentable {
 
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         let textView = scrollView.documentView as! NSTextView
+
+        let fontSize = MarkdownSyntaxHighlighter.baseFontSize * zoom
+        if context.coordinator.fontSize != fontSize {
+            context.coordinator.fontSize = fontSize
+            textView.font = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
+            context.coordinator.applyHighlighting()
+        }
 
         // Consume any pending format command from the toolbar/menu before
         // checking the textVersion path. This runs whenever SwiftUI re-invokes
@@ -71,6 +82,7 @@ struct MarkdownEditorView: NSViewRepresentable {
         weak var textView: NSTextView?
         var isUpdating = false
         var lastTextVersion: Int = -1
+        var fontSize = MarkdownSyntaxHighlighter.baseFontSize
         private var highlightWorkItem: DispatchWorkItem?
         private var activeLineWorkItem: DispatchWorkItem?
 
@@ -104,7 +116,7 @@ struct MarkdownEditorView: NSViewRepresentable {
 
         func applyHighlighting() {
             guard let textView, let textStorage = textView.textStorage else { return }
-            let highlighted = MarkdownSyntaxHighlighter.highlight(textView.string)
+            let highlighted = MarkdownSyntaxHighlighter.highlight(textView.string, fontSize: fontSize)
             let selectedRanges = textView.selectedRanges
             textStorage.beginEditing()
             textStorage.setAttributedString(highlighted)

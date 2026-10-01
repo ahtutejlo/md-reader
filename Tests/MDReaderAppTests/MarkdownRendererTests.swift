@@ -473,3 +473,71 @@ func imageSourceResolvesAgainstDocumentFolder(_ md: String, _ src: String) {
 private func occurrences(of needle: String, in html: String) -> Int {
     html.components(separatedBy: needle).count - 1
 }
+
+private func expectOutline(_ md: String, _ expected: [OutlineItem], sourceLocation: SourceLocation = #_sourceLocation) {
+    let rendered = MarkdownRenderer.render(md)
+    #expect(rendered.outline == expected, sourceLocation: sourceLocation)
+    for item in expected {
+        let heading = "<h\(item.level) id=\"\(item.id)\" data-line=\"\(item.line)\">"
+        #expect(rendered.html.contains(heading), "heading anchor must equal outline id \(item.id)", sourceLocation: sourceLocation)
+    }
+}
+
+@Test func outlineListsHeadingsWithAnchorsAndLines() {
+    let md = """
+    # Guide
+
+    Intro text.
+
+    ## Install
+
+    ### From source
+
+    ## 🚀 ✨
+
+    ## Usage
+    """
+    expectOutline(md, [
+        OutlineItem(id: "guide", level: 1, title: "Guide", line: 0),
+        OutlineItem(id: "install", level: 2, title: "Install", line: 4),
+        OutlineItem(id: "from-source", level: 3, title: "From source", line: 6),
+        OutlineItem(id: "usage", level: 2, title: "Usage", line: 10),
+    ])
+}
+
+@Test func outlineTitleDropsEmphasisAndLinks() {
+    expectOutline("## **Read** the *latest* [docs](https://example.com)", [
+        OutlineItem(id: "read-the-latest-docs", level: 2, title: "Read the latest docs", line: 0),
+    ])
+}
+
+@Test func outlineTitleDropsInlineCodeBackticks() {
+    expectOutline("## Hello *world* `x`", [
+        OutlineItem(id: "hello-world-x", level: 2, title: "Hello world x", line: 0),
+    ])
+}
+
+@Test func outlineNumbersRepeatedHeadingsLikeAnchors() {
+    expectOutline("## Example\n\n## Example\n\n## Example 1", [
+        OutlineItem(id: "example", level: 2, title: "Example", line: 0),
+        OutlineItem(id: "example-1", level: 2, title: "Example", line: 2),
+        OutlineItem(id: "example-1-1", level: 2, title: "Example 1", line: 4),
+    ])
+}
+
+@Test func outlineLeavesOutHeadingsWithoutAnchor() {
+    #expect(MarkdownRenderer.render("## 🚀 ✨\n\n## !!!\n\nplain text").outline.isEmpty)
+}
+
+@Test func outlineIgnoresHashLinesInsideCodeBlock() {
+    expectOutline("```bash\n# install deps\nnpm i\n```\n\n## Run", [
+        OutlineItem(id: "run", level: 2, title: "Run", line: 5),
+    ])
+}
+
+@Test func outlineIncludesUnderlinedHeadings() {
+    expectOutline("Guide\n=====\n\nSetup\n-----", [
+        OutlineItem(id: "guide", level: 1, title: "Guide", line: 0),
+        OutlineItem(id: "setup", level: 2, title: "Setup", line: 3),
+    ])
+}

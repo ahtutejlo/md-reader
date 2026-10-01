@@ -3,33 +3,40 @@ import SwiftUI
 struct ContentView: View {
     let fileURL: URL?
     @Bindable var viewModel: EditorViewModel
-    var onOpenMarkdown: (URL) -> Void
+    var hooks: PreviewHooks
+    @AppStorage(Preferences.showOutlineKey) private var showOutline = true
 
     var body: some View {
         Group {
             if let _ = fileURL {
-                if let error = viewModel.loadError {
-                    ContentUnavailableView(
-                        "Cannot Read File",
-                        systemImage: "exclamationmark.triangle",
-                        description: Text(error.localizedDescription)
-                    )
-                } else {
-                    switch viewModel.viewMode {
-                    case .editor:
-                        MarkdownEditorView(viewModel: viewModel)
-
-                    case .split:
-                        HSplitView {
+                Group {
+                    if let error = viewModel.loadError {
+                        ContentUnavailableView(
+                            "Cannot Read File",
+                            systemImage: "exclamationmark.triangle",
+                            description: Text(error.localizedDescription)
+                        )
+                    } else {
+                        switch viewModel.viewMode {
+                        case .editor:
                             MarkdownEditorView(viewModel: viewModel)
-                                .frame(minWidth: 200)
-                            MarkdownWebView(viewModel: viewModel, onOpenMarkdown: onOpenMarkdown)
-                                .frame(minWidth: 200)
-                        }
 
-                    case .preview:
-                        MarkdownWebView(viewModel: viewModel, onOpenMarkdown: onOpenMarkdown)
+                        case .split:
+                            HSplitView {
+                                MarkdownEditorView(viewModel: viewModel)
+                                    .frame(minWidth: 200)
+                                preview
+                                    .frame(minWidth: 200)
+                            }
+
+                        case .preview:
+                            preview
+                        }
                     }
+                }
+                .inspector(isPresented: $showOutline) {
+                    OutlineView(viewModel: viewModel)
+                        .inspectorColumnWidth(min: 180, ideal: 240, max: 360)
                 }
             } else {
                 ContentUnavailableView(
@@ -68,5 +75,14 @@ struct ContentView: View {
         } message: {
             Text(viewModel.saveError?.localizedDescription ?? "")
         }
+    }
+
+    private var preview: some View {
+        MarkdownWebView(viewModel: viewModel, hooks: hooks)
+            .overlay(alignment: .top) {
+                if viewModel.isFindVisible {
+                    FindBar(viewModel: viewModel)
+                }
+            }
     }
 }

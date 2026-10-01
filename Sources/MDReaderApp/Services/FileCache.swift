@@ -39,6 +39,16 @@ class FileCache {
         save()
     }
 
+    func lastLine(for path: String) -> Int? {
+        files.first { $0.path == path }?.lastLine
+    }
+
+    func setLastLine(_ line: Int, for path: String) {
+        guard let index = files.firstIndex(where: { $0.path == path }), files[index].lastLine != line else { return }
+        files[index].lastLine = line
+        save()
+    }
+
     func pruneMissingFiles(keeping keptPath: String? = nil) {
         let kept = files.filter { $0.path == keptPath || Self.shouldKeep(path: $0.path) }
         guard kept.count != files.count else { return }

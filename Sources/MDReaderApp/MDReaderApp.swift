@@ -7,6 +7,10 @@ struct MDReaderApp: App {
     @State private var fileCache = FileCache()
     @State private var selectedFilePath: String?
     @State private var viewModel = EditorViewModel()
+    @State private var showQuickOpen = false
+    @AppStorage(Preferences.zoomKey) private var zoom = 1.0
+    @AppStorage(Preferences.showOutlineKey) private var showOutline = true
+    @AppStorage(Preferences.groupByProjectKey) private var groupByProject = true
 
     var body: some Scene {
         WindowGroup {
@@ -21,8 +25,21 @@ struct MDReaderApp: App {
                 ContentView(
                     fileURL: selectedFilePath.map { URL(fileURLWithPath: $0) },
                     viewModel: viewModel,
-                    onOpenMarkdown: openMarkdownFile
+                    hooks: PreviewHooks(
+                        openMarkdown: openMarkdownFile,
+                        savedLine: { fileCache.lastLine(for: $0.path) },
+                        saveLine: { fileCache.setLastLine($1, for: $0.path) }
+                    )
                 )
+            }
+            .background {
+                Button("Zoom In") { setZoom(zoom + Preferences.zoomStep) }
+                    .keyboardShortcut("=", modifiers: [.command, .shift])
+                    .opacity(0)
+                    .accessibilityHidden(true)
+            }
+            .sheet(isPresented: $showQuickOpen) {
+                QuickOpenView(files: fileCache.files) { openMarkdownFile(URL(fileURLWithPath: $0.path)) }
             }
             .onOpenURL { url in
                 let fileURL = URL(fileURLWithPath: url.path)
@@ -57,6 +74,14 @@ struct MDReaderApp: App {
                         Image(systemName: "plus")
                     }
                 }
+                ToolbarItem {
+                    Toggle(isOn: $showOutline) {
+                        Label("Outline", systemImage: "list.bullet.indent")
+                            .labelStyle(.iconOnly)
+                    }
+                    .help("Show Outline (⌥⌘0)")
+                    .disabled(selectedFilePath == nil)
+                }
             }
             .onDrop(of: [.fileURL], isTargeted: nil) { providers in
                 for provider in providers {
@@ -76,12 +101,27 @@ struct MDReaderApp: App {
         }
         .handlesExternalEvents(matching: ["*"])
         .commands {
+            CommandGroup(after: .newItem) {
+                Button("Open Quickly…") { showQuickOpen = true }
+                    .keyboardShortcut("p", modifiers: .command)
+            }
             CommandGroup(replacing: .saveItem) {
+                Button("Close") { closeFileOrWindow() }
+                    .keyboardShortcut("w", modifiers: .command)
                 Button("Save") {
                     viewModel.save()
                 }
                 .keyboardShortcut("s", modifiers: .command)
                 .disabled(!viewModel.hasUnsavedChanges)
+            }
+            CommandGroup(after: .pasteboard) {
+                Divider()
+                Button("Copy Document") { RichClipboard.copy(markdown: viewModel.text) }
+                    .keyboardShortcut("c", modifiers: [.command, .option])
+                    .disabled(selectedFilePath == nil)
+                Button("Find…") { showFind() }
+                    .keyboardShortcut("f", modifiers: .command)
+                    .disabled(selectedFilePath == nil)
             }
             CommandGroup(after: .textFormatting) {
                 let formattingDisabled = selectedFilePath == nil || viewModel.viewMode == .preview
@@ -126,8 +166,41 @@ struct MDReaderApp: App {
                 }
                 .keyboardShortcut("d", modifiers: [.command, .shift])
                 .disabled(selectedFilePath == nil)
+                Toggle("Show Outline", isOn: $showOutline)
+                    .keyboardShortcut("0", modifiers: [.command, .option])
+                Toggle("Group by Project", isOn: $groupByProject)
+                Divider()
+                Button("Zoom In") { setZoom(zoom + Preferences.zoomStep) }
+                    .keyboardShortcut("=", modifiers: .command)
+                Button("Zoom Out") { setZoom(zoom - Preferences.zoomStep) }
+                    .keyboardShortcut("-", modifiers: .command)
+                Button("Actual Size") { setZoom(1) }
+                    .keyboardShortcut("0", modifiers: .command)
+                    .disabled(zoom == 1)
             }
         }
+    }
+
+    private func closeFileOrWindow() {
+        if selectedFilePath != nil {
+            selectedFilePath = nil
+        } else {
+            NSApp.keyWindow?.performClose(nil)
+        }
+    }
+
+    private func showFind() {
+        if let textView = NSApp.keyWindow?.firstResponder as? NSTextView, textView.isEditable, !textView.isFieldEditor {
+            let item = NSMenuItem()
+            item.tag = NSTextFinder.Action.showFindInterface.rawValue
+            textView.performFindPanelAction(item)
+        } else if viewModel.viewMode != .editor {
+            viewModel.isFindVisible = true
+        }
+    }
+
+    private func setZoom(_ value: Double) {
+        zoom = (min(max(value, Preferences.zoomRange.lowerBound), Preferences.zoomRange.upperBound) * 10).rounded() / 10
     }
 
     private var windowTitle: String {
