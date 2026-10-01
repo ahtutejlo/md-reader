@@ -219,6 +219,18 @@ struct MarkdownWebView: NSViewRepresentable {
                 hooks?.openMarkdown(url)
             case .localFile(let url) where FileManager.default.fileExists(atPath: url.path):
                 NSWorkspace.shared.activateFileViewerSelecting([url])
+            case .wikilink(let name):
+                guard let directory = documentDirectory else { return NSSound.beep() }
+                DispatchQueue.global(qos: .userInitiated).async {
+                    let url = WikiLinkResolver.resolve(name, from: directory)
+                    DispatchQueue.main.async { [weak self] in
+                        if let url {
+                            self?.hooks?.openMarkdown(url)
+                        } else {
+                            NSSound.beep()
+                        }
+                    }
+                }
             default:
                 NSSound.beep()
             }
@@ -230,14 +242,14 @@ struct MarkdownWebView: NSViewRepresentable {
         }
     }
 
-    private static let shellHTML: String = """
+    static let shellHTML: String = """
     <!DOCTYPE html>
     <html>
     <head>
     <meta charset="utf-8">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css" media="(prefers-color-scheme: light)">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" media="(prefers-color-scheme: dark)">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <style media="(prefers-color-scheme: light)">\(PreviewAssets.lightTheme)</style>
+    <style media="(prefers-color-scheme: dark)">\(PreviewAssets.darkTheme)</style>
+    <script>\(PreviewAssets.highlightScript)</script>
     <style>
     \(Self.previewCSS)
     </style>
@@ -254,9 +266,11 @@ struct MarkdownWebView: NSViewRepresentable {
         const nodes = Array.from(parsed.body.childNodes);
         requestAnimationFrame(function() {
             target.replaceChildren.apply(target, nodes);
-            target.querySelectorAll("pre code").forEach(function(el) {
-                hljs.highlightElement(el);
-            });
+            if (window.hljs) {
+                target.querySelectorAll("pre code").forEach(function(el) {
+                    hljs.highlightElement(el);
+                });
+            }
             target.querySelectorAll("pre > code").forEach(addCodeCopyButton);
             target.querySelectorAll("li.task-list-item > input[type='checkbox']").forEach(function(input) {
                 input.removeAttribute("disabled");
@@ -688,6 +702,35 @@ struct MarkdownWebView: NSViewRepresentable {
     tbody tr:hover td {
         background: color-mix(in oklab, var(--surface) 55%, transparent);
     }
+
+    /* Front matter (Obsidian properties) */
+    .frontmatter {
+        margin: 0 0 1.8em;
+        padding: 0.55em 0.9em;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: color-mix(in oklab, var(--surface) 55%, transparent);
+        font-size: 0.86em;
+    }
+    .frontmatter summary {
+        cursor: pointer;
+        color: var(--text-muted);
+        font-weight: 600;
+        user-select: none;
+        -webkit-user-select: none;
+    }
+    .frontmatter table { margin: 0.5em 0 0.1em; font-size: 1em; }
+    .frontmatter tbody th {
+        width: 28%;
+        padding: 4px 12px 4px 0;
+        text-align: left;
+        vertical-align: top;
+        font-weight: 500;
+        color: var(--text-muted);
+        border: none;
+    }
+    .frontmatter tbody td { padding: 4px 0; border: none; word-break: break-word; }
+    .frontmatter tbody tr:hover td { background: none; }
 
     /* Images */
     img {

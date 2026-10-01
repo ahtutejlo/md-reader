@@ -13,7 +13,7 @@ let package = Package(
             dependencies: [.product(name: "Markdown", package: "swift-markdown")],
             path: "Sources/MDReaderApp",
             exclude: ["Info.plist"],
-            resources: [.copy("Resources/AppIcon.icns")]
+            resources: [.copy("Resources/AppIcon.icns"), .copy("Resources/highlight")]
         ),
         .executableTarget(
             name: "mdreader",

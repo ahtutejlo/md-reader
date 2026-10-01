@@ -27,10 +27,33 @@ enum MarkdownRenderer {
     /// Block elements carry a 0-based `data-line` so the preview can scroll in sync with
     /// the editor; relative image paths resolve against `baseDirectory`.
     static func render(_ source: String, baseDirectory: URL? = nil) -> RenderedMarkdown {
-        let document = Document(parsing: source, options: [.disableSmartOpts])
-        var walker = HTMLWalker(sourceLines: source.components(separatedBy: "\n"), baseDirectory: baseDirectory)
+        var lines = source.components(separatedBy: "\n")
+        let frontMatter = FrontMatter.parse(lines: lines)
+        if let frontMatter {
+            // Blank the block instead of dropping it so data-line numbers still match the editor.
+            for index in 0...frontMatter.closingLine {
+                lines[index] = ""
+            }
+        }
+        let document = Document(parsing: frontMatter == nil ? source : lines.joined(separator: "\n"), options: [.disableSmartOpts])
+        var walker = HTMLWalker(sourceLines: lines, baseDirectory: baseDirectory)
+        if let frontMatter {
+            walker.renderFrontMatter(frontMatter)
+        }
         walker.visit(document)
         return RenderedMarkdown(html: walker.result, outline: walker.outline)
+    }
+
+    static func slug(for text: String) -> String {
+        var slug = ""
+        for scalar in text.lowercased().unicodeScalars {
+            if scalar == " " {
+                slug += "-"
+            } else if CharacterSet.alphanumerics.contains(scalar) || scalar == "-" || scalar == "_" {
+                slug.unicodeScalars.append(scalar)
+            }
+        }
+        return slug.unicodeScalars.contains(where: CharacterSet.alphanumerics.contains) ? slug : ""
     }
 
     static func renderHTML(from source: String, baseDirectory: URL? = nil) -> String {
@@ -140,7 +163,15 @@ private struct HTMLWalker: MarkupWalker {
     }
 
     mutating func visitText(_ text: Text) {
-        result += inLink ? escapeHTML(text.string) : autolinked(text.string)
+        result += inLink ? escapeHTML(text.string) : linked(text.string)
+    }
+
+    mutating func renderFrontMatter(_ frontMatter: FrontMatter) {
+        result += "<details class=\"frontmatter\" data-line=\"0\" open><summary>Properties</summary><table><tbody>\n"
+        for entry in frontMatter.entries {
+            result += "<tr><th>\(escapeHTML(entry.key))</th><td>\(linked(entry.value))</td></tr>\n"
+        }
+        result += "</tbody></table></details>\n"
     }
 
     mutating func visitInlineCode(_ code: InlineCode) {
@@ -219,15 +250,8 @@ private struct HTMLWalker: MarkupWalker {
     /// GitHub-style heading anchor: lowercase, spaces become hyphens, punctuation is
     /// dropped, letters of any script are kept; repeats get `-1`, `-2`, ...
     private mutating func uniqueSlug(for text: String) -> String {
-        var slug = ""
-        for scalar in text.lowercased().unicodeScalars {
-            if scalar == " " {
-                slug += "-"
-            } else if CharacterSet.alphanumerics.contains(scalar) || scalar == "-" || scalar == "_" {
-                slug.unicodeScalars.append(scalar)
-            }
-        }
-        guard slug.unicodeScalars.contains(where: CharacterSet.alphanumerics.contains) else { return "" }
+        let slug = MarkdownRenderer.slug(for: text)
+        guard !slug.isEmpty else { return "" }
         var unique = slug
         var suffix = 0
         while !usedSlugs.insert(unique).inserted {
@@ -293,6 +317,32 @@ private struct HTMLWalker: MarkupWalker {
     }
 
     private static let urlPattern = try! NSRegularExpression(pattern: #"https?://[^\s<>"'`]+"#)
+    private static let wikiLinkPattern = try! NSRegularExpression(pattern: #"\[\[([^\[\]|#\n]*)(?:#([^\[\]|\n]*))?(?:\|([^\[\]\n]*))?\]\]"#)
+
+    /// Obsidian `[[note]]`, `[[note|label]]`, `[[note#heading]]`, `[[#heading]]` and bare
+    /// URLs become anchors; everything else is escaped.
+    private func linked(_ raw: String) -> String {
+        let ns = raw as NSString
+        var output = ""
+        var cursor = 0
+        for match in Self.wikiLinkPattern.matches(in: raw, range: NSRange(location: 0, length: ns.length)) {
+            func group(_ index: Int) -> String {
+                let range = match.range(at: index)
+                return range.location == NSNotFound ? "" : ns.substring(with: range).trimmingCharacters(in: .whitespaces)
+            }
+            let (target, heading, alias) = (group(1), group(2), group(3))
+            guard !target.isEmpty || !heading.isEmpty else { continue }
+            output += autolinked(ns.substring(with: NSRange(location: cursor, length: match.range.location - cursor)))
+            let href = target.isEmpty
+                ? "#" + MarkdownRenderer.slug(for: heading)
+                : "wikilink:" + (target.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? target)
+            let label = alias.isEmpty ? [target, heading].filter { !$0.isEmpty }.joined(separator: " › ") : alias
+            output += "<a class=\"wikilink\" href=\"\(escapeHTML(href))\">\(escapeHTML(label))</a>"
+            cursor = match.range.location + match.range.length
+        }
+        output += autolinked(ns.substring(from: cursor))
+        return output
+    }
 
     private func autolinked(_ raw: String) -> String {
         let ns = raw as NSString
