@@ -6,12 +6,6 @@ enum GitEntry: CaseIterable {
     case directory, worktreeFile
 }
 
-private func makeTempDir() throws -> URL {
-    let dir = FileManager.default.temporaryDirectory.appendingPathComponent("projects-\(UUID())", isDirectory: true)
-    try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-    return dir
-}
-
 private func makeRepo(at url: URL, git: GitEntry = .directory) throws {
     let marker = url.appendingPathComponent(".git")
     switch git {
@@ -50,6 +44,18 @@ func repositoryRootFindsGitEntryAboveFolder(_ git: GitEntry) throws {
     defer { try? FileManager.default.removeItem(at: root) }
 
     #expect(ProjectLocator.repositoryRoot(containing: root.appendingPathComponent("notes/deep").path) == nil)
+}
+
+@Test func nearestAncestorFindsCustomMarkerBelowHomeOnly() throws {
+    let root = try makeTempDir()
+    defer { try? FileManager.default.removeItem(at: root) }
+    let project = root.appendingPathComponent("project")
+    try FileManager.default.createDirectory(at: project, withIntermediateDirectories: true)
+    try "".write(to: project.appendingPathComponent(".marker"), atomically: true, encoding: .utf8)
+
+    #expect(ProjectLocator.nearestAncestor(of: project.appendingPathComponent("docs/deep").path, containing: ".marker") == project.path)
+    // ~/Library always exists, so a walk that passed the home folder would return it.
+    #expect(ProjectLocator.nearestAncestor(of: NSHomeDirectory() + "/\(UUID())/notes", containing: "Library") == nil)
 }
 
 @Test func projectInHomeFolderIsNamedHome() {

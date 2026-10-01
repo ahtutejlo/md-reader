@@ -4,6 +4,7 @@ enum LinkTarget: Equatable {
     case external(URL)
     case markdown(URL)
     case localFile(URL)
+    case wikilink(String)
     case ignored
 }
 
@@ -15,6 +16,10 @@ enum LinkRouter {
         let trimmed = href.trimmingCharacters(in: .whitespaces)
         if let url = URL(string: trimmed), let scheme = url.scheme?.lowercased(), externalSchemes.contains(scheme) {
             return .external(url)
+        }
+        if trimmed.lowercased().hasPrefix("wikilink:") {
+            let name = String(trimmed.dropFirst("wikilink:".count))
+            return .wikilink(name.removingPercentEncoding ?? name)
         }
         guard let fileURL = fileURL(for: trimmed, relativeTo: directory) else { return .ignored }
         return markdownExtensions.contains(fileURL.pathExtension.lowercased()) ? .markdown(fileURL) : .localFile(fileURL)

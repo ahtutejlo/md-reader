@@ -5,7 +5,8 @@ A native macOS markdown reader application built with SwiftUI. MDReader provides
 ## Features
 
 - **Markdown rendering** with GitHub-flavored syntax — headings, nested lists, task lists, tables, code blocks, blockquotes, strikethrough, images, links
-- **Code syntax highlighting** powered by highlight.js
+- **Code syntax highlighting** powered by highlight.js, bundled so it works offline
+- **Obsidian notes** — front matter shown as a Properties table, `[[note]]` links open the linked note (same folder, the vault, or a note whose `name:`/`aliases:` matches)
 - **Dark and light mode** — follows system appearance automatically
 - **File sidebar** — recent files grouped by project (git repository) or as one list, search by name and by text inside the files
 - **Outline** — headings of the open file in a side panel; click to jump, the current section is highlighted

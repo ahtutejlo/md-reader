@@ -38,9 +38,14 @@ final class ProjectLocator {
     }
 
     static func repositoryRoot(containing folder: String, fileManager: FileManager = .default) -> String? {
+        nearestAncestor(of: folder, containing: ".git", fileManager: fileManager)
+    }
+
+    /// The closest folder at or above `folder`, below the home folder, that holds `marker`.
+    static func nearestAncestor(of folder: String, containing marker: String, fileManager: FileManager = .default) -> String? {
         var current = folder
         while current != "/" && current != NSHomeDirectory() && !current.isEmpty {
-            if fileManager.fileExists(atPath: (current as NSString).appendingPathComponent(".git")) {
+            if fileManager.fileExists(atPath: (current as NSString).appendingPathComponent(marker)) {
                 return current
             }
             current = (current as NSString).deletingLastPathComponent

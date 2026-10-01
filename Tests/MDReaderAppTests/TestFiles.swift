@@ -6,6 +6,12 @@ func writeTempNote(_ text: String = "# Note") throws -> URL {
     return url
 }
 
+func makeTempDir() throws -> URL {
+    let dir = FileManager.default.temporaryDirectory.appendingPathComponent("mdreader-tests-\(UUID())", isDirectory: true)
+    try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    return dir
+}
+
 func setModificationDate(of url: URL, to date: Date) throws {
     try FileManager.default.setAttributes([.modificationDate: date], ofItemAtPath: url.path)
 }

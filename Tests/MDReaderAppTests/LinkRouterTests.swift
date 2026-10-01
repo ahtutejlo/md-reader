@@ -9,6 +9,7 @@ private enum Route: Equatable {
     case external(String)
     case markdown(String)
     case localFile(String)
+    case wikilink(String)
     case ignored
 }
 
@@ -17,6 +18,7 @@ private func route(_ href: String, from directory: URL? = notes) -> Route {
     case .external(let url): .external(url.absoluteString)
     case .markdown(let url): .markdown(url.path)
     case .localFile(let url): .localFile(url.path)
+    case .wikilink(let name): .wikilink(name)
     case .ignored: .ignored
     }
 }
@@ -41,6 +43,14 @@ func webAndMailLinksOpenExternally(_ href: String) {
 @Test func otherLocalFileIsRevealedInFinder() {
     #expect(route("../assets/report.pdf") == .localFile("/docs/assets/report.pdf"))
     #expect(route("notes.md.bak") == .localFile("/docs/notes/notes.md.bak"))
+}
+
+@Test(arguments: [
+    ("wikilink:My%20Note", "My Note"),
+    ("wikilink:%D0%9D%D0%BE%D1%82%D0%B0%D1%82%D0%BA%D0%B0", "Нотатка"),
+])
+func wikilinkHrefNamesTheNote(_ href: String, _ name: String) {
+    #expect(route(href) == .wikilink(name))
 }
 
 @Test(arguments: ["javascript:alert(1)", "vscode://file/docs/notes/guide.md", "", "#setup"])
