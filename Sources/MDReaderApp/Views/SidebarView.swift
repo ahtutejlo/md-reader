@@ -4,9 +4,10 @@ import SwiftUI
 struct SidebarView: View {
     let files: [CachedFile]
     @Binding var selectedFilePath: String?
-    var onRemove: (CachedFile) -> Void
+    var onRemove: (Set<String>) -> Void
     var onToggleFavorite: (String) -> Void
 
+    @State private var selection: Set<String> = []
     @State private var searchText = ""
     @State private var showFavoritesOnly = false
     @State private var contentIndex = FileContentIndex()
@@ -44,7 +45,7 @@ struct SidebarView: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
 
-            List(selection: $selectedFilePath) {
+            List(selection: listSelection) {
                 if groupByProject {
                     ForEach(projectLocator.group(matches, path: \.file.path)) { group in
                         Section(group.name) {
@@ -55,28 +56,68 @@ struct SidebarView: View {
                     ForEach(matches, content: row)
                 }
             }
+            .contextMenu(forSelectionType: String.self) { paths in
+                menu(for: paths)
+            }
+            .onDeleteCommand {
+                remove(visibleFiles(in: selection))
+            }
         }
         .searchable(text: $searchText, prompt: "Search names and text")
         .navigationSplitViewColumnWidth(min: 200, ideal: 250)
+        .onChange(of: selectedFilePath, initial: true) {
+            selection = selectedFilePath.map { Set([$0]) } ?? []
+        }
+    }
+
+    private var listSelection: Binding<Set<String>> {
+        Binding(
+            get: { selection },
+            set: { newSelection in
+                selection = newSelection
+                if newSelection.count == 1, let path = newSelection.first {
+                    selectedFilePath = path
+                }
+            }
+        )
     }
 
     private func row(_ match: SidebarMatch) -> some View {
         let file = match.file
         return FileRow(file: file, snippet: match.snippet, onToggleFavorite: { onToggleFavorite(file.path) })
-            .tag(Optional(file.path))
-            .contextMenu {
-                Button("Reveal in Finder") {
-                    NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: file.path)])
-                }
-                .disabled(!file.exists)
-                Button("Copy Path") {
-                    RichClipboard.copy(text: file.path)
-                }
-                Divider()
-                Button("Remove from List", role: .destructive) {
-                    onRemove(file)
-                }
+            .tag(file.path)
+    }
+
+    @ViewBuilder
+    private func menu(for paths: Set<String>) -> some View {
+        let targets = visibleFiles(in: paths)
+        if targets.count == 1, let file = targets.first {
+            Button("Reveal in Finder") {
+                NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: file.path)])
             }
+            .disabled(!file.exists)
+            Button("Copy Path") {
+                RichClipboard.copy(text: file.path)
+            }
+            Divider()
+            Button("Remove from List", role: .destructive) {
+                remove(targets)
+            }
+        } else if targets.count > 1 {
+            Button("Remove \(targets.count) Files from List", role: .destructive) {
+                remove(targets)
+            }
+        }
+    }
+
+    private func visibleFiles(in paths: Set<String>) -> [CachedFile] {
+        matches.filter { paths.contains($0.file.path) }.map(\.file)
+    }
+
+    private func remove(_ targets: [CachedFile]) {
+        let paths = Set(targets.map(\.path))
+        onRemove(paths)
+        selection.subtract(paths)
     }
 }
 
